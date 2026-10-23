@@ -19,6 +19,8 @@ const START: SearchParams = { text: "", mode: null, status: 1, sort: "relevance"
 const hide = () => void api.hideOverlay();
 /** Hidden this long, the overlay lets go of its cover images: decoded, they are most of its memory. */
 const RELEASE_COVERS_AFTER_MS = 15_000;
+/** What the grid shows while the overlay is hidden: the results stay fetched, but no cards are kept. */
+const NO_SETS: Beatmapset[] = [];
 
 function tipFor(context: OverlayContext | null): string | null {
   if (!context) return null;
@@ -47,8 +49,10 @@ export default function Overlay() {
   const { playingId, toggle: togglePreview, stop: stopPreview } = usePreview();
   const search = useSearch(params, visible);
 
-  // The images come straight back from the HTTP cache the next time the overlay is shown.
-  const [coversReleased, setCoversReleased] = useState(false);
+  // The images come straight back from the HTTP cache the next time the overlay is shown. They
+  // start out released too: the first results are fetched at start-up, while the overlay is
+  // hidden, and loading thirty covers for a window nobody sees would waste the memory saved here.
+  const [coversReleased, setCoversReleased] = useState(true);
   useEffect(() => {
     if (visible) {
       setCoversReleased(false);
@@ -164,7 +168,9 @@ export default function Overlay() {
       />
       {tip && <p className="tip">{tip}</p>}
       <ResultsGrid
-        sets={sets}
+        // Prefetched results wait as data. Mounted while hidden, thirty cards would keep layout
+        // and compositor layers alive (measured: about 12 MB) for a window nobody can see.
+        sets={visible ? sets : NO_SETS}
         installed={installed}
         jobFor={jobFor}
         selected={selected}

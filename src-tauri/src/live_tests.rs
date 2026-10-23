@@ -243,6 +243,30 @@ fn live_bench_system_scans() {
     }
 }
 
+/// How long the overlay's search box waits for typed queries. Every query differs, so none is
+/// answered from the cache, and they go out the way the app sends them (osu.direct first).
+#[tokio::test]
+#[ignore = "uses the network and times searches"]
+async fn live_bench_search() {
+    use std::time::Instant;
+    let mirrors = MirrorSet::new();
+    let order = MirrorId::DEFAULT_ORDER.to_vec();
+    let words = ["camellia", "yoasobi", "linked horizon", "kaf", "daft punk", "nanahira", "ado", "kenshi yonezu"];
+    let mut times = Vec::new();
+    for word in words {
+        let query = SearchQuery { query: word.into(), limit: 30, ..SearchQuery::default() };
+        let started = Instant::now();
+        let response = mirrors.search(&order, &query).await;
+        let elapsed = started.elapsed().as_millis();
+        println!("{word:<16} {elapsed:>5} ms via {}", response.map_or("nothing (failed)", |r| r.mirror.name()));
+        times.push(elapsed);
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+    times.sort_unstable();
+    let mean = times.iter().sum::<u128>() / times.len() as u128;
+    println!("mean {mean} ms, median {} ms, slowest {} ms", times[times.len() / 2], times[times.len() - 1]);
+}
+
 /// A stand-in for osu!: always healthy, and "imports" a set a fixed time after being launched, so
 /// what a run measures is the app's own overhead rather than osu!'s speed.
 struct StandInOsu {

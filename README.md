@@ -48,7 +48,11 @@ previous version:
 | Memory, settings window open | 139 MB, 9 processes | 104 MB, 7 processes |
 | Memory, sitting in the tray | 137 MB | 100 MB (86 MB after a silent start at login) |
 | Idle CPU | about 0 % | about 0 % |
+| First time the search card opens: results on screen | 1.36 s | 0.12 s |
 | A 4.5 MB map from "download" to osu! having it | 1.85 s | 0.75 s |
+
+The first search runs at start-up, while the card is still hidden, so the first time you press the
+shortcut the results are already there. Opening it again within a minute doesn't search again.
 
 The transfer time is dominated by the mirror: catboy.best sent the same 3.9 MB file in 0.4 s where
 osu.direct took 1.1-1.3 s. The rest was a name lookup that ran after the download (about 260 ms)

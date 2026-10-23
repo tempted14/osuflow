@@ -13,7 +13,8 @@ import { hotkeyFromEvent } from "./hotkey";
 import { autoHideMs, browserName, linkMode, toastLine, toastProgress } from "./links";
 import { applyProgressEvent, applyStateEvent, isBusy, removeFinished, removeJob, upsertJob } from "./jobs";
 import { isNavKey, moveSelection } from "./nav";
-import { applyLibraryDelta, mergeResults, visibleResults } from "./results";
+import { FRESH_FOR_MS, applyLibraryDelta, mergeResults, planFetch, searchKey, visibleResults } from "./results";
+import type { FetchSituation } from "./results";
 import { starColor } from "./starColor";
 import type {
   Beatmap,
@@ -193,6 +194,52 @@ describe("results", () => {
     const after = applyLibraryDelta(before, { added: [9], removed: [2] });
     expect([...after].sort()).toEqual([1, 3, 9]);
     expect([...before].sort()).toEqual([1, 2, 3]);
+  });
+});
+
+describe("when the overlay's search fetches", () => {
+  const key = searchKey({ text: "freedom dive", mode: null, status: 1, sort: "relevance" });
+  const situation = (patch: Partial<FetchSituation> = {}): FetchSituation => ({
+    enabled: true, typing: false, last: null, inFlightKey: null, key, now: 100_000, hadError: false, ...patch,
+  });
+
+  it("treats the same query the way the backend does", () => {
+    const base = { text: "Freedom Dive", mode: null, status: 1, sort: "relevance" };
+    expect(searchKey({ ...base, text: "  freedom dive " })).toBe(searchKey(base));
+    expect(searchKey({ ...base, mode: 0 })).not.toBe(searchKey(base));
+    expect(searchKey({ ...base, status: 4 })).not.toBe(searchKey(base));
+    expect(searchKey({ ...base, sort: "plays" })).not.toBe(searchKey(base));
+  });
+
+  it("fetches the first results while the overlay is still hidden, once", () => {
+    expect(planFetch(situation({ enabled: false }))).toBe("now");
+    expect(planFetch(situation({ enabled: false, inFlightKey: key }))).toBe("skip");
+    expect(planFetch(situation({ enabled: false, last: { key, at: 99_000 } }))).toBe("skip");
+  });
+
+  it("waits for a fetch that is already on its way instead of restarting it", () => {
+    expect(planFetch(situation({ inFlightKey: key }))).toBe("skip");
+    // A different query in flight is not this one.
+    expect(planFetch(situation({ inFlightKey: "other" }))).toBe("now");
+  });
+
+  it("reopens on fresh results without asking again, and refetches stale ones", () => {
+    const fresh = { key, at: 100_000 - (FRESH_FOR_MS - 1) };
+    const stale = { key, at: 100_000 - FRESH_FOR_MS };
+    expect(planFetch(situation({ last: fresh }))).toBe("skip");
+    expect(planFetch(situation({ last: stale }))).toBe("now");
+  });
+
+  it("refetches when the last attempt failed, or was for another query, or never happened", () => {
+    const fresh = { key, at: 99_000 };
+    expect(planFetch(situation({ last: fresh, hadError: true }))).toBe("now");
+    expect(planFetch(situation({ last: { ...fresh, key: "other" } }))).toBe("now");
+    expect(planFetch(situation({ last: null }))).toBe("now");
+  });
+
+  it("debounces typing, whatever was fetched before", () => {
+    expect(planFetch(situation({ typing: true, last: { key, at: 99_999 } }))).toBe("debounced");
+    expect(planFetch(situation({ typing: true, inFlightKey: key }))).toBe("debounced");
   });
 });
 
