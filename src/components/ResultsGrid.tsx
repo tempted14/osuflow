@@ -60,15 +60,30 @@ export function ResultsGrid(props: Props) {
     return () => observer.disconnect();
   }, [onLoadMore, hasMore, loading, sets.length]);
 
+  // True for the moment the mouse is what selects a card. Selecting with the mouse must never
+  // move the list: pressing Download on a card that is only partly in view used to scroll it
+  // fully into view, the button slid out from under the cursor, and the click was lost.
+  const pointerSelecting = useRef(false);
+
   useEffect(() => {
-    if (selected < 0) return;
+    if (selected < 0 || pointerSelecting.current) return;
     scroller.current
       ?.querySelector(`[data-index="${selected}"]`)
       ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selected]);
 
   return (
-    <div className="results" ref={scroller}>
+    <div
+      className="results"
+      ref={scroller}
+      onMouseDownCapture={() => {
+        // The selection this causes is handled (and its effect has run) before the timeout fires.
+        pointerSelecting.current = true;
+        setTimeout(() => {
+          pointerSelecting.current = false;
+        }, 0);
+      }}
+    >
       {props.error && (
         <div className="notice error">
           <span>Couldn't load maps: {props.error}</span>

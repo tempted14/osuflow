@@ -1,3 +1,4 @@
+import { downloadFraction } from "./format";
 import type {
   DownloadJob,
   DownloadProgressEvent,
@@ -35,6 +36,38 @@ export function applyProgressEvent(jobs: DownloadJob[], event: DownloadProgressE
     total: event.total,
     mirror: event.mirror,
   });
+}
+
+/** What the downloads pill needs to know, at a glance. */
+export interface DownloadSummary {
+  active: number;
+  failed: number;
+  done: number;
+  /** Overall progress of the running downloads, 0..1, or null until one has reported its size. */
+  fraction: number | null;
+}
+
+export function summarizeDownloads(jobs: DownloadJob[]): DownloadSummary {
+  const running = jobs.filter(isBusy);
+  const known = running.map(downloadFraction).filter((fraction): fraction is number => fraction !== null);
+  return {
+    active: running.length,
+    failed: jobs.filter((job) => job.state === "failed").length,
+    done: jobs.filter((job) => job.state === "done").length,
+    // Downloads that haven't reported a size yet count as nothing done, so the bar never jumps back.
+    fraction: known.length === 0 ? null : known.reduce((sum, fraction) => sum + fraction, 0) / running.length,
+  };
+}
+
+/** The pill's one line: what is happening now, else what went wrong, else what finished. */
+export function pillText(summary: DownloadSummary): string {
+  if (summary.active > 0) {
+    const what = summary.active === 1 ? "Downloading" : `${summary.active} downloading`;
+    return summary.fraction === null ? what : `${what} · ${Math.round(summary.fraction * 100)}%`;
+  }
+  if (summary.failed > 0) return summary.failed === 1 ? "1 failed" : `${summary.failed} failed`;
+  if (summary.done > 0) return `${summary.done} sent to osu! ✓`;
+  return "";
 }
 
 export const removeJob = (jobs: DownloadJob[], setId: number) => jobs.filter((job) => job.setId !== setId);

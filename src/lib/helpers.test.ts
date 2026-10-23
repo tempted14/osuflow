@@ -11,7 +11,16 @@ import {
 } from "./format";
 import { hotkeyFromEvent } from "./hotkey";
 import { autoHideMs, browserName, linkMode, toastLine, toastProgress } from "./links";
-import { applyProgressEvent, applyStateEvent, isBusy, removeFinished, removeJob, upsertJob } from "./jobs";
+import {
+  applyProgressEvent,
+  applyStateEvent,
+  isBusy,
+  pillText,
+  removeFinished,
+  removeJob,
+  summarizeDownloads,
+  upsertJob,
+} from "./jobs";
 import { isNavKey, moveSelection } from "./nav";
 import { FRESH_FOR_MS, applyLibraryDelta, mergeResults, planFetch, searchKey, visibleResults } from "./results";
 import type { FetchSituation } from "./results";
@@ -172,6 +181,43 @@ describe("download jobs", () => {
     expect(jobs.map(isBusy)).toEqual([true, false, false]);
     expect(removeFinished(jobs).map((j) => j.setId)).toEqual([1]);
     expect(removeJob(jobs, 2).map((j) => j.setId)).toEqual([1, 3]);
+  });
+});
+
+describe("the downloads pill", () => {
+  const job = (patch: Partial<DownloadJob> = {}): DownloadJob => ({
+    setId: 1, label: "A – B", state: "downloading", received: 0, total: null, error: null, mirror: null, ...patch,
+  });
+  const text = (jobs: DownloadJob[]) => pillText(summarizeDownloads(jobs));
+
+  it("says nothing when there is nothing to say", () => {
+    expect(text([])).toBe("");
+  });
+
+  it("describes what is running, with the overall percentage once a size is known", () => {
+    expect(text([job({ state: "queued" })])).toBe("Downloading");
+    expect(text([job({ received: 25, total: 100 })])).toBe("Downloading · 25%");
+    expect(text([job({ received: 50, total: 100 }), job({ setId: 2, received: 100, total: 100 })])).toBe("2 downloading · 75%");
+  });
+
+  it("counts a download that hasn't reported a size as nothing done, so the percentage never jumps back", () => {
+    const summary = summarizeDownloads([job({ received: 100, total: 100 }), job({ setId: 2, state: "queued" })]);
+    expect(summary.active).toBe(2);
+    expect(summary.fraction).toBe(0.5);
+  });
+
+  it("leads with running downloads, then failures, then what was sent", () => {
+    const running = job({ received: 10, total: 100 });
+    const failed = job({ setId: 2, state: "failed", error: "boom" });
+    const sent = job({ setId: 3, state: "done" });
+    expect(text([running, failed, sent])).toBe("Downloading · 10%");
+    expect(text([failed, sent])).toBe("1 failed");
+    expect(text([failed, job({ setId: 4, state: "failed" }), sent])).toBe("2 failed");
+    expect(text([sent, job({ setId: 5, state: "done" })])).toBe("2 sent to osu! ✓");
+  });
+
+  it("ignores cancelled downloads", () => {
+    expect(text([job({ state: "cancelled" })])).toBe("");
   });
 });
 

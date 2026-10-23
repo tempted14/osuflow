@@ -188,20 +188,20 @@ export default function Overlay() {
         onPreview={(set) => togglePreview(set.id, set.preview_url)}
       />
       <footer className="statusbar">
-        <span>
+        <span className="status-text">
           {search.loading ? "Searching…" : `${sets.length} maps${mirror ? ` · ${mirror}` : ""}`}
           {!search.sortApplied && " · this mirror can't sort, so these are best matches"}
         </span>
+        <DownloadsDrawer
+          jobs={jobs}
+          onCancel={cancel}
+          onRetry={(job) => startDownload(job.setId, job.label)}
+          onDismiss={dismiss}
+          onClear={clearFinished}
+          onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
+        />
         <span className="keys">↑↓←→ select · Enter download · Space preview · Esc close</span>
       </footer>
-      <DownloadsDrawer
-        jobs={jobs}
-        onCancel={cancel}
-        onRetry={(job) => startDownload(job.setId, job.label)}
-        onDismiss={dismiss}
-        onClear={clearFinished}
-        onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
-      />
     </div>
   );
 }

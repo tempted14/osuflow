@@ -3,6 +3,7 @@ name = "osuflow"
 version = "0.1.0"
 description = "osu!direct-style beatmap search and download overlay for osu! stable"
 authors = ["osu!flow contributors"]
+license = "MIT"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

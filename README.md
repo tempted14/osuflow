@@ -81,3 +81,7 @@ cd src-tauri && cargo test --lib live_ -- --ignored --nocapture --test-threads=1
 
 Settings live in `%APPDATA%\com.osuflow.app\settings.json`; a settings file from the app's earlier
 name (QuickDirect) is copied across on first start.
+
+## License
+
+[MIT](LICENSE). osu! and its assets belong to ppy; none of them are included here.
