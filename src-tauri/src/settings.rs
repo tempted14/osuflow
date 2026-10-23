@@ -18,7 +18,7 @@ pub struct Settings {
     pub hotkey: String,
     /// Leave results out of the overlay when they are already in the Songs folder.
     pub hide_installed: bool,
-    /// Download beatmap links that Windows passes to QuickDirect (when it is the default
+    /// Download beatmap links that Windows passes to osu!flow (when it is the default
     /// browser) instead of opening them. Off by default.
     pub link_handler: bool,
     /// The browser the link handler replaced, so every other link can still be opened in it.
@@ -38,6 +38,29 @@ impl Default for Settings {
             previous_browser: None,
         }
     }
+}
+
+/// The app was called QuickDirect before osu!flow, and Tauri keeps its files under the app's
+/// identifier, so the old settings sit next to the new folder under this name.
+const LEGACY_IDENTIFIER: &str = "com.quickdirect.app";
+
+/// Where the settings file of the earlier QuickDirect build would be, given where the new one goes.
+fn legacy_settings_path(path: &Path) -> Option<PathBuf> {
+    // <config root>/<identifier>/settings.json
+    Some(path.parent()?.parent()?.join(LEGACY_IDENTIFIER).join(path.file_name()?))
+}
+
+/// Copies the settings written under the app's earlier name to `path`, once: only when `path`
+/// doesn't exist yet and the old file does. The old file is left where it is.
+pub fn migrate_legacy_settings(path: &Path) {
+    if path.exists() {
+        return;
+    }
+    let Some(legacy) = legacy_settings_path(path).filter(|legacy| legacy.is_file()) else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::copy(legacy, path);
 }
 
 impl Settings {
@@ -83,6 +106,40 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn settings_in(root: &Path, identifier: &str) -> PathBuf {
+        root.join(identifier).join("settings.json")
+    }
+
+    #[test]
+    fn settings_from_the_quickdirect_days_move_across_once() {
+        let root = tempfile::tempdir().unwrap();
+        let old = settings_in(root.path(), LEGACY_IDENTIFIER);
+        let new = settings_in(root.path(), "com.osuflow.app");
+        Settings { hotkey: "Ctrl+Alt+M".into(), hide_installed: true, ..Settings::default() }
+            .save(&old)
+            .unwrap();
+
+        migrate_legacy_settings(&new);
+        let migrated = Settings::load(&new);
+        assert_eq!(migrated.hotkey, "Ctrl+Alt+M");
+        assert!(migrated.hide_installed);
+        assert!(old.is_file(), "the old file is left alone");
+
+        // Later changes are never overwritten by the old file.
+        Settings { hotkey: "Ctrl+Shift+F".into(), ..migrated }.save(&new).unwrap();
+        migrate_legacy_settings(&new);
+        assert_eq!(Settings::load(&new).hotkey, "Ctrl+Shift+F");
+    }
+
+    #[test]
+    fn nothing_is_created_when_there_are_no_old_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let new = settings_in(root.path(), "com.osuflow.app");
+        migrate_legacy_settings(&new);
+        assert!(!new.exists());
+        assert!(!new.parent().unwrap().exists(), "no empty folder either");
+    }
 
     #[test]
     fn defaults_prefer_no_video_and_list_every_mirror() {

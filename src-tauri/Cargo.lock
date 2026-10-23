@@ -2692,6 +2692,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "osuflow"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "notify",
+ "percent-encoding",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "windows",
+ "winreg",
+ "wiremock",
+]
+
+[[package]]
 name = "pango"
 version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2972,31 +2997,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "quickdirect"
-version = "0.1.0"
-dependencies = [
- "futures-util",
- "notify",
- "percent-encoding",
- "reqwest",
- "serde",
- "serde_json",
- "sysinfo",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "windows",
- "winreg",
- "wiremock",
 ]
 
 [[package]]

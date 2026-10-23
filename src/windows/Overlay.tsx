@@ -17,6 +17,8 @@ import type { Beatmapset, OverlayContext } from "../lib/types";
 
 const START: SearchParams = { text: "", mode: null, status: 1, sort: "relevance" };
 const hide = () => void api.hideOverlay();
+/** Hidden this long, the overlay lets go of its cover images: decoded, they are most of its memory. */
+const RELEASE_COVERS_AFTER_MS = 15_000;
 
 function tipFor(context: OverlayContext | null): string | null {
   if (!context) return null;
@@ -27,7 +29,10 @@ function tipFor(context: OverlayContext | null): string | null {
   return null;
 }
 
-/** The osu!direct-style search window that the hotkey opens on top of osu!. */
+/**
+ * The osu!direct-style search card that the hotkey opens over osu!. The window is exactly this
+ * card (the backend sizes and places it), with Windows' frosted glass behind it.
+ */
 export default function Overlay() {
   const [visible, setVisible] = useState(false);
   const [context, setContext] = useState<OverlayContext | null>(null);
@@ -41,6 +46,17 @@ export default function Overlay() {
   const { jobs, jobFor, start: startDownload, cancel, dismiss, clearFinished } = useDownloads();
   const { playingId, toggle: togglePreview, stop: stopPreview } = usePreview();
   const search = useSearch(params, visible);
+
+  // The images come straight back from the HTTP cache the next time the overlay is shown.
+  const [coversReleased, setCoversReleased] = useState(false);
+  useEffect(() => {
+    if (visible) {
+      setCoversReleased(false);
+      return;
+    }
+    const timer = setTimeout(() => setCoversReleased(true), RELEASE_COVERS_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [visible]);
 
   const keep = useMemo(() => new Set(jobs.map((job) => job.setId)), [jobs]);
   const sets = useMemo(
@@ -81,7 +97,8 @@ export default function Overlay() {
 
   const download = useCallback(
     (set: Beatmapset) => {
-      if (!installed.has(set.id)) startDownload(set.id, setLabel(set));
+      // The artist and title name the file, so the backend doesn't have to look them up.
+      if (!installed.has(set.id)) startDownload(set.id, setLabel(set), { artist: set.artist, title: set.title });
     },
     [installed, startDownload],
   );
@@ -136,55 +153,49 @@ export default function Overlay() {
   const mirror = search.mirror ? mirrorLabel(search.mirror) : null;
 
   return (
-    <div
-      className={`backdrop${visible ? " visible" : ""}`}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) hide();
-      }}
-    >
-      <div className="panel" role="dialog" aria-label="QuickDirect map search">
-        <SearchControls
-          inputRef={inputRef}
-          params={params}
-          settings={settings}
-          onChange={changeParams}
-          onSettings={updateSettings}
-          onClose={hide}
-        />
-        {tip && <p className="tip">{tip}</p>}
-        <ResultsGrid
-          sets={sets}
-          installed={installed}
-          jobFor={jobFor}
-          selected={selected}
-          playingId={playingId}
-          hasMore={search.hasMore}
-          loading={search.loading}
-          error={search.error}
-          onColumnsChange={setColumns}
-          onLoadMore={search.loadMore}
-          onRetry={search.retry}
-          onSelect={setSelected}
-          onDownload={download}
-          onCancel={cancel}
-          onPreview={(set) => togglePreview(set.id, set.preview_url)}
-        />
-        <footer className="statusbar">
-          <span>
-            {search.loading ? "Searching…" : `${sets.length} maps${mirror ? ` · ${mirror}` : ""}`}
-            {!search.sortApplied && " · this mirror can't sort, so these are best matches"}
-          </span>
-          <span className="keys">↑↓←→ select · Enter download · Space preview · Esc close</span>
-        </footer>
-        <DownloadsDrawer
-          jobs={jobs}
-          onCancel={cancel}
-          onRetry={(job) => startDownload(job.setId, job.label)}
-          onDismiss={dismiss}
-          onClear={clearFinished}
-          onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
-        />
-      </div>
+    <div className={`panel${visible ? " visible" : ""}`} role="dialog" aria-label="osu!flow map search">
+      <SearchControls
+        inputRef={inputRef}
+        params={params}
+        settings={settings}
+        onChange={changeParams}
+        onSettings={updateSettings}
+        onClose={hide}
+      />
+      {tip && <p className="tip">{tip}</p>}
+      <ResultsGrid
+        sets={sets}
+        installed={installed}
+        jobFor={jobFor}
+        selected={selected}
+        playingId={playingId}
+        hasMore={search.hasMore}
+        loading={search.loading}
+        error={search.error}
+        releaseCovers={coversReleased}
+        onColumnsChange={setColumns}
+        onLoadMore={search.loadMore}
+        onRetry={search.retry}
+        onSelect={setSelected}
+        onDownload={download}
+        onCancel={cancel}
+        onPreview={(set) => togglePreview(set.id, set.preview_url)}
+      />
+      <footer className="statusbar">
+        <span>
+          {search.loading ? "Searching…" : `${sets.length} maps${mirror ? ` · ${mirror}` : ""}`}
+          {!search.sortApplied && " · this mirror can't sort, so these are best matches"}
+        </span>
+        <span className="keys">↑↓←→ select · Enter download · Space preview · Esc close</span>
+      </footer>
+      <DownloadsDrawer
+        jobs={jobs}
+        onCancel={cancel}
+        onRetry={(job) => startDownload(job.setId, job.label)}
+        onDismiss={dismiss}
+        onClear={clearFinished}
+        onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
+      />
     </div>
   );
 }

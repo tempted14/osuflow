@@ -245,7 +245,7 @@ mod tests {
             use winreg::{RegKey, enums::HKEY_CURRENT_USER};
             static NEXT: AtomicU32 = AtomicU32::new(0);
             let id = format!("{}x{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
-            let (extension, prog_id) = (format!(".qdtest{id}"), format!("QuickDirectTest{id}"));
+            let (extension, prog_id) = (format!(".qdtest{id}"), format!("OsuFlowTest{id}"));
             let user = RegKey::predef(HKEY_CURRENT_USER);
             let (ext_key, _) = user.create_subkey(format!(r"Software\Classes\{extension}")).unwrap();
             ext_key.set_value("", &prog_id).unwrap();

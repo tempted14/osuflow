@@ -8,7 +8,8 @@
 //! 2. look at osu! from outside and refuse to launch while it has a dialog open, isn't
 //!    responding, or more than one copy is running;
 //! 3. hand over one archive at a time;
-//! 4. only report success once the set's folder really appears in Songs - otherwise say why.
+//! 4. only report success once osu! has really taken the archive (it moves it into Songs, then
+//!    extracts it) - otherwise say why.
 //!
 //! Everything touching the machine goes through [`OsuEnv`], so the logic is tested with a fake
 //! instead of a real osu!.
@@ -136,7 +137,12 @@ pub struct Timing {
     pub verify_running: Duration,
     /// ...and when this launch had to start osu!, which takes a while.
     pub verify_cold_start: Duration,
+    /// How often to look for signs that osu! took the archive. Those are single file lookups, so
+    /// this can be short: osu! reacts within a fraction of a second and waiting longer than
+    /// needed is time the user sits watching.
     pub verify_poll: Duration,
+    /// How often to also list the whole Songs folder (hundreds of entries), the slow check.
+    pub listing_every: Duration,
     /// While waiting, how often to check that osu! hasn't become blocked.
     pub busy_check_every: Duration,
 }
@@ -149,7 +155,8 @@ impl Default for Timing {
             recheck_delay: Duration::from_millis(500),
             verify_running: Duration::from_secs(30),
             verify_cold_start: Duration::from_secs(90),
-            verify_poll: Duration::from_millis(400),
+            verify_poll: Duration::from_millis(40),
+            listing_every: Duration::from_millis(500),
             busy_check_every: Duration::from_secs(2),
         }
     }
@@ -167,6 +174,16 @@ pub struct Handoff {
     timing: Timing,
     /// Held for a whole hand-off, so launches never overlap.
     turn: Mutex<()>,
+}
+
+/// Has osu! taken the archive? osu! moves it into Songs and extracts it there, so it is either
+/// gone from where it was, sitting in Songs waiting to be extracted, or already a folder. The
+/// first two are single file lookups that can run every few milliseconds; listing Songs is the
+/// slow check, which only `check_listing` asks for.
+fn osu_took(archive: &Path, songs_dir: &Path, set_id: u32, check_listing: bool) -> bool {
+    !archive.exists()
+        || archive.file_name().is_some_and(|name| songs_dir.join(name).exists())
+        || (check_listing && library::has_folder_for(songs_dir, set_id))
 }
 
 fn is_sharing_violation(error: &io::Error) -> bool {
@@ -263,7 +280,7 @@ impl Handoff {
         }
 
         let limit = if cold_start { self.timing.verify_cold_start } else { self.timing.verify_running };
-        match self.wait_for_set(&install.songs_dir, set_id, limit).await? {
+        match self.wait_for_set(&install.songs_dir, set_id, archive, limit).await? {
             Wait::Appeared => Ok(ImportMethod::LaunchedOsu),
             Wait::Blocked(reason) => Err(AppError::OsuBusy(reason)),
             Wait::TimedOut => Err(AppError::ImportStalled {
@@ -273,19 +290,20 @@ impl Handoff {
         }
     }
 
-    /// Waits for the set's folder to show up. If osu! turns out to be blocked meanwhile (seen
-    /// on two checks in a row, so a passing glitch doesn't count) it stops early instead of
-    /// waiting out the clock.
-    async fn wait_for_set(&self, songs_dir: &Path, set_id: u32, limit: Duration) -> Result<Wait> {
+    /// Waits for osu! to take the archive. If osu! turns out to be blocked meanwhile (seen on
+    /// two checks in a row, so a passing glitch doesn't count) it stops early instead of waiting
+    /// out the clock.
+    async fn wait_for_set(&self, songs_dir: &Path, set_id: u32, archive: &Path, limit: Duration) -> Result<Wait> {
         let started = Instant::now();
         let mut last_busy_check = Instant::now();
+        let mut last_listing: Option<Instant> = None;
         let mut seen_blocked: Option<Blocked> = None;
         loop {
-            let dir = songs_dir.to_path_buf();
-            let present = tokio::task::spawn_blocking(move || library::has_folder_for(&dir, set_id))
-                .await
-                .map_err(|e| AppError::Task(e.to_string()))?;
-            if present {
+            let check_listing = last_listing.is_none_or(|at| at.elapsed() >= self.timing.listing_every);
+            if check_listing {
+                last_listing = Some(Instant::now());
+            }
+            if osu_took(archive, songs_dir, set_id, check_listing) {
                 return Ok(Wait::Appeared);
             }
             if started.elapsed() >= limit {
@@ -543,8 +561,14 @@ mod tests {
             verify_running: Duration::from_millis(600),
             verify_cold_start: Duration::from_millis(1500),
             verify_poll: Duration::from_millis(20),
+            listing_every: Duration::from_millis(20),
             busy_check_every: Duration::from_millis(40),
         }
+    }
+
+    /// Like `quick`, but listing Songs is rare, so only the cheap lookups can notice an import.
+    fn quick_without_listings() -> Timing {
+        Timing { listing_every: Duration::from_secs(60), ..quick() }
     }
 
     fn handoff(env: &Arc<FakeEnv>) -> Handoff {
@@ -567,6 +591,69 @@ mod tests {
         assert!(started.elapsed() >= Duration::from_millis(100), "returned before the set existed");
         assert_eq!(env.launched().len(), 1);
         assert_eq!(env.launched()[0].0, archive);
+    }
+
+    /// Moves the archive into Songs (as osu! does), `after` a delay, without extracting it yet.
+    fn moves_archive_into_songs_after(songs: &Path, delay: Duration) -> impl Fn(&Path) + Send + Sync + 'static {
+        let songs = songs.to_path_buf();
+        move |archive| {
+            let (from, to) = (archive.to_path_buf(), songs.join(archive.file_name().unwrap()));
+            std::thread::spawn(move || {
+                std::thread::sleep(delay);
+                std::fs::rename(from, to).unwrap();
+            });
+        }
+    }
+
+    #[tokio::test]
+    async fn the_archive_leaving_its_folder_counts_as_osu_taking_it_without_any_listing() {
+        let world = world();
+        let archive = archive(&world, 31);
+        let env = Arc::new(
+            FakeEnv::new(Some(world.install.clone()), ready())
+                .on_launch(moves_archive_into_songs_after(&world.songs, Duration::from_millis(60))),
+        );
+        let started = Instant::now();
+        let handoff = Handoff::with_timing(env.clone(), quick_without_listings());
+        let method = handoff.hand_off(&archive, 31, &Settings::default()).await.unwrap();
+        assert_eq!(method, ImportMethod::LaunchedOsu);
+        assert!(started.elapsed() < Duration::from_millis(400), "took {:?}", started.elapsed());
+        assert!(!archive.exists());
+    }
+
+    #[tokio::test]
+    async fn osu_taking_the_archive_is_seen_within_a_few_polls_not_a_second_later() {
+        let world = world();
+        let archive = archive(&world, 32);
+        let env = Arc::new(
+            FakeEnv::new(Some(world.install.clone()), ready())
+                .on_launch(moves_archive_into_songs_after(&world.songs, Duration::from_millis(100))),
+        );
+        let timing = Timing { verify_poll: Duration::from_millis(10), ..quick_without_listings() };
+        let started = Instant::now();
+        Handoff::with_timing(env, timing).hand_off(&archive, 32, &Settings::default()).await.unwrap();
+        let late = started.elapsed().saturating_sub(Duration::from_millis(100));
+        assert!(late < Duration::from_millis(80), "noticed {late:?} after osu! had it");
+    }
+
+    #[test]
+    fn the_three_signs_that_osu_took_the_archive() {
+        let world = world();
+        let present = archive(&world, 40);
+        // Nothing has happened: the archive is where it was and Songs has nothing for the set.
+        assert!(!osu_took(&present, &world.songs, 40, true));
+        // A folder for the set only counts when the listing is asked for.
+        std::fs::create_dir_all(world.songs.join("40 Whatever")).unwrap();
+        assert!(!osu_took(&present, &world.songs, 40, false));
+        assert!(osu_took(&present, &world.songs, 40, true));
+        // The archive sitting in Songs counts straight away...
+        let other = archive(&world, 41);
+        std::fs::copy(&other, world.songs.join(other.file_name().unwrap())).unwrap();
+        assert!(osu_took(&other, &world.songs, 41, false));
+        // ...and so does the archive having left its folder.
+        let gone = archive(&world, 42);
+        std::fs::remove_file(&gone).unwrap();
+        assert!(osu_took(&gone, &world.songs, 42, false));
     }
 
     #[tokio::test]

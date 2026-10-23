@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    quickdirect_lib::run()
+    osuflow_lib::run()
 }

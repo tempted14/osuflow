@@ -8,7 +8,7 @@ use crate::{
 };
 use futures_util::StreamExt;
 use percent_encoding::percent_decode_str;
-use reqwest::{Client, header};
+use reqwest::{Client, Url, header, redirect};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -63,6 +63,26 @@ pub struct ProgressEvent {
     pub mirror: &'static str,
 }
 
+/// The artist and title a caller already knows, so the archive can be named without asking a
+/// mirror. The overlay has them from the search result; a clicked link looked them up for its toast.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameHint {
+    pub artist: String,
+    pub title: String,
+}
+
+impl NameHint {
+    /// `None` unless there is something to name the archive with.
+    pub fn from_parts(artist: Option<String>, title: Option<String>) -> Option<Self> {
+        let hint = Self { artist: artist.unwrap_or_default(), title: title.unwrap_or_default() };
+        (!hint.artist.trim().is_empty() || !hint.title.trim().is_empty()).then_some(hint)
+    }
+
+    fn archive_name(&self, set_id: u32) -> Option<String> {
+        archive_name(set_id, &self.artist, &self.title)
+    }
+}
+
 /// Where download events go. The app forwards them to the webview; tests record them.
 pub trait EventSink: Send + Sync {
     fn state(&self, event: StateEvent);
@@ -96,6 +116,8 @@ impl Downloader {
         // Archives can be large, so there is no overall timeout - only a stall timeout.
         let client = Client::builder()
             .user_agent(USER_AGENT)
+            // Redirects are followed by hand (see `get`) to read the filename they announce.
+            .redirect(redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
             .read_timeout(Duration::from_secs(30))
             .build()
@@ -142,8 +164,31 @@ impl Downloader {
         Ok((token, ActiveGuard { downloader: self, set_id }))
     }
 
+    /// Opens a connection to the mirror downloads will try first, so the first download after a
+    /// quiet spell doesn't pay for the TLS handshake. Failure doesn't matter and is ignored.
+    pub fn warm_up(&self, preferred: &[MirrorId]) {
+        let Some(mirror) = self.mirrors.candidates(preferred, false).first().copied() else { return };
+        let (client, url) = (self.client.clone(), self.mirrors.base_url(mirror));
+        tokio::spawn(async move {
+            let _ = tokio::time::timeout(Duration::from_secs(3), client.head(url).send()).await;
+        });
+    }
+
     /// Downloads the archive for `set_id` and returns the path of the validated .osz.
+    #[cfg(test)]
     pub async fn fetch(&self, set_id: u32, no_video: bool, preferred: &[MirrorId]) -> Result<PathBuf> {
+        self.fetch_named(set_id, no_video, preferred, None).await
+    }
+
+    /// Like `fetch`, naming the archive from `hint` when there is one instead of asking a mirror.
+    pub async fn fetch_named(
+        &self,
+        set_id: u32,
+        no_video: bool,
+        preferred: &[MirrorId],
+        hint: Option<&NameHint>,
+    ) -> Result<PathBuf> {
+        let hinted = hint.and_then(|hint| hint.archive_name(set_id));
         let (token, _guard) = self.register(set_id)?;
         self.emit_state(set_id, DownloadState::Queued, None);
         let permit = tokio::select! {
@@ -154,7 +199,7 @@ impl Downloader {
             }
         };
         self.emit_state(set_id, DownloadState::Downloading, None);
-        let result = self.fetch_from_mirrors(set_id, no_video, preferred, &token).await;
+        let result = self.fetch_from_mirrors(set_id, no_video, preferred, hinted.as_deref(), &token).await;
         drop(permit);
         match &result {
             Ok(_) => {}
@@ -169,14 +214,15 @@ impl Downloader {
         set_id: u32,
         no_video: bool,
         preferred: &[MirrorId],
+        hinted: Option<&str>,
         token: &CancellationToken,
     ) -> Result<PathBuf> {
         let mut failures = Vec::new();
         for mirror in self.mirrors.candidates(preferred, false) {
-            match self.try_mirror(mirror, set_id, no_video, token).await {
+            match self.try_mirror(mirror, set_id, no_video, hinted, preferred, token).await {
                 Ok(path) => {
                     self.mirrors.mark_healthy(mirror);
-                    return Ok(self.with_standard_name(path, set_id, preferred).await);
+                    return Ok(path);
                 }
                 Err((AppError::Cancelled, _)) => return Err(AppError::Cancelled),
                 Err((error, transient)) => {
@@ -190,32 +236,53 @@ impl Downloader {
         Err(AppError::AllMirrorsFailed(failures.join("; ")))
     }
 
-    /// Some mirrors (osu.direct) send no filename, which leaves the archive called `{id}.osz`,
-    /// and osu! names the Songs folder after the archive. This looks the set up and renames the
-    /// archive to `{id} {artist} - {title}.osz`. Any failure keeps the plain name: a slightly
-    /// untidy folder is better than a failed or delayed download.
-    async fn with_standard_name(&self, archive: PathBuf, set_id: u32, preferred: &[MirrorId]) -> PathBuf {
-        let unnamed = archive
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|stem| stem == set_id.to_string());
-        if !unnamed {
-            return archive;
+    /// Some mirrors send no filename, which would leave the archive called `{id}.osz` - and osu!
+    /// names the Songs folder after the archive. This looks the set up to name it
+    /// `{id} {artist} - {title}.osz`, and runs alongside the download rather than after it: it is
+    /// started as soon as the response headers show no name, and its result is picked up once the
+    /// file has arrived. It never holds the download up for long (see the timeout).
+    fn start_name_lookup(&self, set_id: u32, preferred: &[MirrorId]) -> tokio::task::JoinHandle<Option<String>> {
+        let mirrors = self.mirrors.clone();
+        let preferred = preferred.to_vec();
+        let timeout = self.name_lookup_timeout;
+        tokio::spawn(async move {
+            let set = tokio::time::timeout(timeout, mirrors.lookup_set(&preferred, set_id)).await.ok()?.ok()?;
+            (set.id == set_id).then(|| standard_archive_name(&set)).flatten()
+        })
+    }
+
+    /// Sends the request and follows redirects itself, so it can read the filename a redirect
+    /// announced: osu.direct names the file on its 302, and the storage response that 302 points
+    /// at carries no name at all.
+    async fn get(
+        &self,
+        mut url: Url,
+        token: &CancellationToken,
+    ) -> std::result::Result<(reqwest::Response, Option<String>), (AppError, bool)> {
+        const MAX_REDIRECTS: usize = 5;
+        let mut announced = None;
+        for _ in 0..=MAX_REDIRECTS {
+            let response = tokio::select! {
+                response = self.client.get(url.clone()).send() => response,
+                _ = token.cancelled() => return Err((AppError::Cancelled, false)),
+            }
+            .map_err(|e| (AppError::BadResponse(format!("request failed: {e}")), true))?;
+            if !response.status().is_redirection() {
+                return Ok((response, announced));
+            }
+            announced = announced.or_else(|| disposition_name(response.headers()));
+            let next = response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|location| location.to_str().ok())
+                .and_then(|location| url.join(location).ok());
+            match next {
+                Some(next) => url = next,
+                // A redirect with nowhere to go is handed back as the unsuccessful status it is.
+                None => return Ok((response, announced)),
+            }
         }
-        let lookup = tokio::time::timeout(self.name_lookup_timeout, self.mirrors.lookup_set(preferred, set_id)).await;
-        let Some(name) = lookup
-            .ok()
-            .and_then(|found| found.ok())
-            .filter(|set| set.id == set_id)
-            .and_then(|set| standard_archive_name(&set))
-        else {
-            return archive;
-        };
-        let target = archive.with_file_name(name);
-        match fs::rename(&archive, &target).await {
-            Ok(()) => target,
-            Err(_) => archive,
-        }
+        Err((AppError::BadResponse("too many redirects".into()), true))
     }
 
     /// One attempt against one mirror. The error carries whether the mirror looks unwell
@@ -225,14 +292,12 @@ impl Downloader {
         mirror: MirrorId,
         set_id: u32,
         no_video: bool,
+        hinted: Option<&str>,
+        preferred: &[MirrorId],
         token: &CancellationToken,
     ) -> std::result::Result<PathBuf, (AppError, bool)> {
         let url = self.mirrors.download_url(mirror, set_id, no_video);
-        let response = tokio::select! {
-            response = self.client.get(url).send() => response,
-            _ = token.cancelled() => return Err((AppError::Cancelled, false)),
-        }
-        .map_err(|e| (AppError::BadResponse(format!("request failed: {e}")), true))?;
+        let (response, redirect_name) = self.get(url, token).await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -252,12 +317,12 @@ impl Downloader {
         }
 
         let total = response.content_length();
-        let file_name = response
-            .headers()
-            .get(header::CONTENT_DISPOSITION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(filename_from_disposition)
-            .map(|name| sanitize_filename(&name))
+        // The name the mirror announced (on the file itself, or on a redirect hop), else the
+        // caller's hint, else a plain `{id}.osz` plus a lookup that runs while the file downloads.
+        let announced = disposition_name(response.headers()).or(redirect_name);
+        let lookup = (announced.is_none() && hinted.is_none()).then(|| self.start_name_lookup(set_id, preferred));
+        let file_name = announced
+            .or_else(|| hinted.map(str::to_string))
             .unwrap_or_else(|| format!("{set_id}.osz"));
 
         fs::create_dir_all(&self.dir)
@@ -275,9 +340,15 @@ impl Downloader {
                 fs::rename(&part, &target)
                     .await
                     .map_err(|e| (AppError::from(e), false))?;
-                Ok(target)
+                Ok(match lookup {
+                    Some(lookup) => rename_to_looked_up_name(target, lookup).await,
+                    None => target,
+                })
             }
             Err(error) => {
+                if let Some(lookup) = lookup {
+                    lookup.abort();
+                }
                 let _ = fs::remove_file(&part).await;
                 let transient = !matches!(error, AppError::Cancelled);
                 Err((error, transient))
@@ -379,15 +450,41 @@ pub fn sanitize_filename(name: &str) -> String {
 /// creates from the archive matches the rest of the library. `None` when the set has neither
 /// an artist nor a title to name it with.
 pub fn standard_archive_name(set: &Beatmapset) -> Option<String> {
-    let artist = set.artist.trim();
-    let title = set.title.trim();
+    archive_name(set.id, &set.artist, &set.title)
+}
+
+fn archive_name(id: u32, artist: &str, title: &str) -> Option<String> {
+    let (artist, title) = (artist.trim(), title.trim());
     let label = match (artist.is_empty(), title.is_empty()) {
         (true, true) => return None,
         (false, false) => format!("{artist} - {title}"),
         (false, true) => artist.to_string(),
         (true, false) => title.to_string(),
     };
-    Some(sanitize_filename(&format!("{} {label}", set.id)))
+    Some(sanitize_filename(&format!("{id} {label}")))
+}
+
+/// The filename a response announces in its Content-Disposition header, made safe for Windows.
+fn disposition_name(headers: &header::HeaderMap) -> Option<String> {
+    headers
+        .get(header::CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(filename_from_disposition)
+        .map(|name| sanitize_filename(&name))
+}
+
+/// Renames `archive` to the name a lookup found. Any failure keeps the plain name: a slightly
+/// untidy Songs folder is better than a failed or delayed download.
+async fn rename_to_looked_up_name(archive: PathBuf, lookup: tokio::task::JoinHandle<Option<String>>) -> PathBuf {
+    let Some(name) = lookup.await.ok().flatten() else { return archive };
+    let target = archive.with_file_name(name);
+    if target == archive {
+        return archive;
+    }
+    match fs::rename(&archive, &target).await {
+        Ok(()) => target,
+        Err(_) => archive,
+    }
 }
 
 /// A real .osz is a zip: it starts with a local file header and ends with an end-of-archive
@@ -685,6 +782,131 @@ mod tests {
         let file = downloader.fetch(15, false, &MirrorId::ALL).await.unwrap();
         assert_eq!(file.file_name().unwrap(), "15.osz");
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+    }
+
+    #[tokio::test]
+    async fn a_hint_names_the_archive_without_any_lookup() {
+        let rig = rig().await;
+        mount_unnamed_download(&rig.catboy, 51).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v2/s/51"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&rig.catboy)
+            .await;
+        let hint = NameHint::from_parts(Some("The Artist".into()), Some("Title".into())).unwrap();
+        let file = rig.downloader.fetch_named(51, false, &MirrorId::ALL, Some(&hint)).await.unwrap();
+        assert_eq!(file.file_name().unwrap(), "51 The Artist - Title.osz");
+        assert_eq!(std::fs::read(&file).unwrap(), fake_osz());
+    }
+
+    #[test]
+    fn a_hint_needs_an_artist_or_a_title() {
+        assert!(NameHint::from_parts(None, None).is_none());
+        assert!(NameHint::from_parts(Some("  ".into()), Some(String::new())).is_none());
+        let artist_only = NameHint::from_parts(Some("A".into()), None).unwrap();
+        assert_eq!(artist_only.archive_name(9).as_deref(), Some("9 A.osz"));
+    }
+
+    #[tokio::test]
+    async fn the_name_a_redirect_announces_is_used_without_a_lookup() {
+        let rig = rig().await;
+        // osu.direct's shape: the name rides on the 302, and the storage response it points at has none.
+        Mock::given(method("GET"))
+            .and(path("/api/d/61"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("content-disposition", "attachment; filename=\"61 Hop - Named.osz\"")
+                    .insert_header("location", "/storage/61.osz"),
+            )
+            .mount(&rig.osu)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/storage/61.osz"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/octet-stream")
+                    .set_body_bytes(fake_osz()),
+            )
+            .expect(1)
+            .mount(&rig.osu)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v2/s/61"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&rig.osu)
+            .await;
+        // catboy has no mock, answers 404, and osu.direct serves the set.
+        let file = rig.downloader.fetch(61, false, &MirrorId::ALL).await.unwrap();
+        assert_eq!(file.file_name().unwrap(), "61 Hop - Named.osz");
+    }
+
+    #[tokio::test]
+    async fn a_redirect_loop_gives_up_instead_of_following_forever() {
+        let rig = rig().await;
+        Mock::given(method("GET"))
+            .and(path("/d/62n"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", "/d/62n"))
+            .mount(&rig.catboy)
+            .await;
+        Mock::given(method("GET")).and(path("/api/d/62")).respond_with(ResponseTemplate::new(500)).mount(&rig.osu).await;
+        let error = rig.downloader.fetch(62, true, &MirrorId::ALL).await.unwrap_err();
+        assert!(error.to_string().contains("too many redirects"), "{error}");
+    }
+
+    /// A server that answers a download with its headers at once and the body `body_delay`
+    /// later (a big file in flight), and every other request with a 404.
+    fn serve_headers_then_body(body: Vec<u8>, body_delay: Duration) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let body = body.clone();
+                std::thread::spawn(move || {
+                    let mut stream = stream;
+                    let mut request = [0u8; 2048];
+                    let read = stream.read(&mut request).unwrap_or(0);
+                    let first_line = String::from_utf8_lossy(&request[..read]).lines().next().unwrap_or("").to_string();
+                    if first_line.contains("/d/") {
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 200 OK\r\ncontent-type: application/octet-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = stream.flush();
+                        std::thread::sleep(body_delay);
+                        let _ = stream.write_all(&body);
+                    } else {
+                        let _ = write!(stream, "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+                    }
+                });
+            }
+        });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn the_name_lookup_runs_while_the_file_downloads() {
+        // The headers come at once but the body takes 300 ms; the lookup also takes 300 ms.
+        // One after the other that is 600 ms or more; side by side it is about 300.
+        let catboy = serve_headers_then_body(fake_osz(), Duration::from_millis(300));
+        let osu = MockServer::start().await;
+        mount_set_lookup(
+            &osu,
+            71,
+            json_response(r#"{"id":71,"title":"T","artist":"A"}"#).set_delay(Duration::from_millis(300)),
+        )
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let mirrors = Arc::new(MirrorSet::with_bases(&catboy, &osu.uri()));
+        let downloader = Downloader::new(mirrors, dir.path().to_path_buf(), Arc::new(Recorder::default()));
+
+        let started = Instant::now();
+        let file = downloader.fetch(71, false, &MirrorId::ALL).await.unwrap();
+        assert_eq!(file.file_name().unwrap(), "71 A - T.osz");
+        assert!(started.elapsed() < Duration::from_millis(520), "took {:?}", started.elapsed());
     }
 
     fn named(id: u32, artist: &str, title: &str) -> Beatmapset {

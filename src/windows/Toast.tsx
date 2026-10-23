@@ -15,6 +15,14 @@ export default function Toast() {
   const [stage, setStage] = useState<DownloadStateEvent | null>(null);
   const [progress, setProgress] = useState<DownloadProgressEvent | null>(null);
 
+  // A toast window that was only just built may have missed the event that opened it.
+  useEffect(() => {
+    api
+      .getCurrentToast()
+      .then((current) => current && setToast((existing) => existing ?? current))
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     const listeners = Promise.all([
       listen<LinkToast>("link-toast", ({ payload }) => {

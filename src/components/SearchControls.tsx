@@ -29,6 +29,15 @@ const SORTS: [string, Sort][] = [
   ["Artist A–Z", "artist"],
 ];
 
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 export function SearchControls(props: {
   inputRef: RefObject<HTMLInputElement | null>;
   params: SearchParams;
@@ -41,16 +50,19 @@ export function SearchControls(props: {
   return (
     <header className="controls">
       <div className="row">
-        <input
-          ref={props.inputRef}
-          className="search"
-          type="search"
-          placeholder="Search artist, title, mapper or tags…"
-          value={params.text}
-          onChange={(e) => props.onChange({ text: e.currentTarget.value })}
-          spellCheck={false}
-          autoComplete="off"
-        />
+        <div className="search-field">
+          <SearchIcon />
+          <input
+            ref={props.inputRef}
+            className="search"
+            type="search"
+            placeholder="Search artist, title, mapper or tags…"
+            value={params.text}
+            onChange={(e) => props.onChange({ text: e.currentTarget.value })}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </div>
         <button className="close" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
           ✕
         </button>

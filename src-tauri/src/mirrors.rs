@@ -24,7 +24,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const USER_AGENT: &str = concat!("QuickDirect/", env!("CARGO_PKG_VERSION"));
+pub const USER_AGENT: &str = concat!("osu!flow/", env!("CARGO_PKG_VERSION"));
 /// osu.direct rejects anything above 100 results per page.
 pub const MAX_PAGE: u32 = 100;
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(6);
@@ -46,6 +46,19 @@ impl MirrorId {
     /// first. It caps downloads at 200 per day; catboy.best has the higher rate limit and takes
     /// over automatically when osu.direct refuses.
     pub const DEFAULT_ORDER: [MirrorId; 2] = [MirrorId::OsuDirect, MirrorId::Catboy];
+
+    /// Mirrors in the order downloads should try them. catboy.best sends the same file about
+    /// three times faster (measured 2026-10-23: 0.4 s against 1.1-1.3 s, because osu.direct
+    /// spends nearly a second building the archive before the first byte) and has no daily cap,
+    /// so it goes first. Search keeps its own order, which prefers osu.direct for its ranking and
+    /// sorting. An order the user chose themselves is respected.
+    pub fn for_downloads(preferred: &[MirrorId]) -> Vec<MirrorId> {
+        if preferred == Self::DEFAULT_ORDER {
+            Self::ALL.to_vec()
+        } else {
+            preferred.to_vec()
+        }
+    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -226,6 +239,11 @@ impl MirrorSet {
 
     fn url(&self, mirror: MirrorId, path: &str) -> Url {
         Url::parse(&format!("{}{path}", self.bases[&mirror])).expect("mirror base URL is valid")
+    }
+
+    /// The mirror's home address, used to open a connection ahead of the first download.
+    pub fn base_url(&self, mirror: MirrorId) -> Url {
+        self.url(mirror, "/")
     }
 
     pub fn search_url(&self, mirror: MirrorId, query: &SearchQuery) -> Url {
@@ -470,6 +488,22 @@ mod tests {
         let set = MirrorSet::with_bases("http://c.test", "http://o.test");
         let url = set.search_url(MirrorId::OsuDirect, &query("x"));
         assert_eq!(url.as_str(), "http://o.test/api/v2/search?q=x&status=1&amount=50&offset=0");
+    }
+
+    #[test]
+    fn downloads_try_the_faster_mirror_first_unless_the_user_chose_an_order() {
+        // The stored default is meant for search; downloads go to the faster mirror.
+        assert_eq!(MirrorId::for_downloads(&MirrorId::DEFAULT_ORDER), vec![MirrorId::Catboy, MirrorId::OsuDirect]);
+        // Anything else was a choice and is kept as it is.
+        assert_eq!(MirrorId::for_downloads(&[MirrorId::Catboy, MirrorId::OsuDirect]), vec![MirrorId::Catboy, MirrorId::OsuDirect]);
+        assert_eq!(MirrorId::for_downloads(&[MirrorId::OsuDirect]), vec![MirrorId::OsuDirect]);
+    }
+
+    #[test]
+    fn base_urls_point_at_each_mirrors_home() {
+        let mirrors = MirrorSet::with_bases("http://c.example", "http://o.example/");
+        assert_eq!(mirrors.base_url(MirrorId::Catboy).as_str(), "http://c.example/");
+        assert_eq!(mirrors.base_url(MirrorId::OsuDirect).as_str(), "http://o.example/");
     }
 
     #[test]

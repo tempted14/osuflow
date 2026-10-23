@@ -6,7 +6,7 @@ import type { LinkHandlerStatus } from "../lib/types";
 
 /**
  * The opt-in "Beatmap links" section. Windows doesn't let an app make itself the default
- * browser, so turning it on is two steps: QuickDirect registers itself, then the user chooses it
+ * browser, so turning it on is two steps: osu!flow registers itself, then the user chooses it
  * in Default apps. The status refreshes on its own so the second step ticks off when it happens.
  */
 export function LinkSettings() {
@@ -57,7 +57,7 @@ export function LinkSettings() {
   const turnOn = () =>
     run(async () => {
       const next = await api.setLinkHandler(true);
-      // Land the user on QuickDirect's own entry so the last step is one click.
+      // Land the user on osu!flow's own entry so the last step is one click.
       if (!next.isDefault) await api.openDefaultApps();
       return next;
     });
@@ -66,10 +66,10 @@ export function LinkSettings() {
   const browser = browserName(status.previousBrowser);
 
   return (
-    <section>
+    <section className="group">
       <h2>Beatmap links</h2>
       <p>
-        Click a beatmap link in osu! multiplayer, chat or Discord and QuickDirect downloads the map instead of
+        Click a beatmap link in osu! multiplayer, chat or Discord and osu!flow downloads the map instead of
         opening a web page. Every other link still opens in {browser}.
       </p>
 
@@ -78,7 +78,7 @@ export function LinkSettings() {
           Turn it on here
         </li>
         <li className={status.isDefault ? "ok" : ""}>
-          Choose QuickDirect in Windows' Default apps
+          Choose osu!flow in Windows' Default apps
           <span className="muted"> (Windows only lets you do this step)</span>
         </li>
       </ol>
@@ -88,13 +88,13 @@ export function LinkSettings() {
       )}
       {mode === "waiting" && (
         <p className="warn">
-          Waiting for you to choose QuickDirect in Default apps. Until then links keep opening as usual.
+          Waiting for you to choose osu!flow in Default apps. Until then links keep opening as usual.
         </p>
       )}
       {mode === "active" && <p className="ok-text">On. Beatmap links are downloaded; other links go to {browser}.</p>}
       {mode === "forwarding" && (
         <p className="warn">
-          Switched off, but Windows still sends your links to QuickDirect, which passes them on to {browser}.
+          Switched off, but Windows still sends your links to osu!flow, which passes them on to {browser}.
           Choose {browser} in Default apps to stop that.
         </p>
       )}

@@ -1,13 +1,13 @@
 //! The commands the webview can call, plus the shared app state they run against.
 
 use crate::{
-    downloader::{DownloadState, Downloader, EventSink, ProgressEvent, StateEvent},
+    downloader::{DownloadState, Downloader, EventSink, NameHint, ProgressEvent, StateEvent},
     error::{AppError, Result},
     handoff::Handoff,
     hotkey::{self, HotkeyStatus},
     importer::ImportMethod,
     library::Library,
-    mirrors::{MirrorSet, SearchQuery, SearchResponse},
+    mirrors::{MirrorId, MirrorSet, SearchQuery, SearchResponse},
     models::Beatmapset,
     osu_locator::{self, OsuInstall},
     overlay::{self, OverlayState},
@@ -60,17 +60,25 @@ pub async fn search(state: State<'_, AppState>, query: SearchQuery) -> Result<Se
 /// says how it was handed over. Success means the set's folder really appeared in Songs; if
 /// osu! is busy or never imports it, the error says so and the download is kept.
 #[tauri::command]
-pub async fn download_beatmapset(state: State<'_, AppState>, set_id: u32) -> Result<ImportMethod> {
-    download_and_import(&state, set_id).await
+pub async fn download_beatmapset(
+    state: State<'_, AppState>,
+    set_id: u32,
+    artist: Option<String>,
+    title: Option<String>,
+) -> Result<ImportMethod> {
+    download_and_import(&state, set_id, NameHint::from_parts(artist, title)).await
 }
 
 /// The whole pipeline - download, guarded hand-off, progress events - shared by the overlay and
-/// the link handler.
-pub async fn download_and_import(state: &AppState, set_id: u32) -> Result<ImportMethod> {
+/// the link handler. `hint` is the artist and title when the caller already has them, which saves
+/// asking a mirror for them to name the file.
+pub async fn download_and_import(state: &AppState, set_id: u32, hint: Option<NameHint>) -> Result<ImportMethod> {
     let settings = state.settings_snapshot();
+    // Downloads go to the faster mirror first; search keeps the order in the settings.
+    let order = MirrorId::for_downloads(&settings.mirror_order);
     let archive = state
         .downloader
-        .fetch(set_id, settings.no_video, &settings.mirror_order)
+        .fetch_named(set_id, settings.no_video, &order, hint.as_ref())
         .await?;
     state.downloader.emit_state(set_id, DownloadState::Importing, None);
     match state.handoff.hand_off(&archive, set_id, &settings).await {
@@ -200,6 +208,17 @@ pub fn set_hotkey(app: AppHandle, state: State<'_, AppState>, hotkey: String) ->
     tray::refresh_hotkey(&app, &hotkey);
     let _ = app.emit("settings-changed", &settings);
     Ok(status)
+}
+
+/// Whether osu!flow starts quietly in the tray when Windows starts.
+#[tauri::command]
+pub fn get_autostart() -> bool {
+    tray::autostart_enabled()
+}
+
+#[tauri::command]
+pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool> {
+    Ok(tray::set_autostart(&app, enabled)?)
 }
 
 /// Opens a beatmapset's page on osu.ppy.sh in the default browser.

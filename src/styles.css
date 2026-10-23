@@ -1,19 +1,61 @@
+/*
+ * osu!flow - frosted glass on Windows 11.
+ *
+ * The blur itself comes from Windows (an acrylic backdrop behind each window, set up by the
+ * backend). The page only paints translucent surfaces on top of it, so there is no
+ * backdrop-filter here: it would blur nothing but the page and cost GPU time for no gain.
+ * Without acrylic (older Windows) `data-glass="off"` swaps the translucent layers for solid ones.
+ */
+
 :root {
   color-scheme: dark;
-  --bg: #1b1a21;
-  --panel: #24232c;
-  --panel-2: #2d2c37;
-  --line: #3a3946;
-  --text: #f2f2f6;
-  --muted: #9b99aa;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --text: #f5f4fb;
+  --text-2: rgba(245, 244, 251, 0.74);
+  --muted: rgba(245, 244, 251, 0.5);
+
   --accent: #ff66aa;
-  --good: #66d18f;
-  --bad: #ff7a7a;
-  --warn: #ffcc66;
-  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  --accent-2: #a77bff;
+  --accent-gradient: linear-gradient(135deg, #ff66aa 0%, #a77bff 100%);
+  --on-accent: #1a1022;
+  --good: #6ee7a8;
+  --bad: #ff7d8a;
+  --warn: #ffd27a;
+  --info: #6cc7ff;
+
+  /* Laid over the acrylic: gives the glass its brand colour and keeps text readable. */
+  --tint: rgba(20, 17, 31, 0.5);
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --surface-strong: rgba(255, 255, 255, 0.13);
+  --stroke: rgba(255, 255, 255, 0.09);
+  --stroke-strong: rgba(255, 255, 255, 0.2);
+  --shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --gap: 12px;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --fast: 120ms;
+  --medium: 200ms;
+  --slow: 340ms;
+
+  font-family: var(--font);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.42;
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-glass="off"] {
+  --tint: rgb(27, 25, 38);
+  --surface: rgb(38, 35, 52);
+  --surface-hover: rgb(48, 44, 66);
+  --surface-strong: rgb(58, 54, 78);
 }
 
 * {
@@ -27,16 +69,20 @@ body,
   margin: 0;
 }
 
+html,
 body {
-  background: var(--bg);
-}
-
-/* The overlay window is transparent; only the dimmed backdrop and the panel are drawn. */
-html[data-window="overlay"],
-html[data-window="overlay"] body {
-  background: transparent;
   overflow: hidden;
 }
+
+body {
+  background: var(--tint);
+}
+
+#root {
+  overflow: auto;
+}
+
+/* ---------- form controls ---------- */
 
 button,
 input,
@@ -45,13 +91,21 @@ select {
   color: inherit;
 }
 
+/* :where() keeps the input's specificity at zero, so `.search` and friends can override its padding. */
 button,
 select,
-input:not([type="checkbox"]) {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+:where(input:not([type="checkbox"])) {
+  background: var(--surface);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-sm);
   padding: 7px 12px;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    box-shadow var(--medium) var(--ease),
+    transform var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    opacity var(--medium) var(--ease);
 }
 
 button {
@@ -59,20 +113,41 @@ button {
   white-space: nowrap;
 }
 
-button:hover:not(:disabled) {
-  border-color: var(--accent);
+button:hover:not(:disabled),
+select:hover {
+  background: var(--surface-hover);
+  border-color: var(--stroke-strong);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 button:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: default;
 }
 
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: rgba(255, 102, 170, 0.75);
+  box-shadow: 0 0 0 3px rgba(255, 102, 170, 0.2);
+}
+
+select {
+  appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23ffffff' stroke-opacity='.6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+select option {
+  background: #1e1b2c;
+  color: var(--text);
 }
 
 code,
@@ -83,8 +158,9 @@ kbd {
 }
 
 kbd {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  border: 1px solid var(--stroke-strong);
+  border-bottom-width: 2px;
   border-radius: 6px;
   padding: 1px 7px;
 }
@@ -97,41 +173,99 @@ kbd {
   color: var(--warn);
 }
 
-/* ---------- overlay ---------- */
-
-.backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 8, 14, 0.62);
-  opacity: 0;
-  transition: opacity 0.12s ease-out;
+.ok-text {
+  color: var(--good);
 }
 
-.backdrop.visible {
-  opacity: 1;
-}
-
-.panel {
+/* A switch: the checkbox itself is restyled, so labels and keyboard behaviour stay native. */
+input[type="checkbox"] {
+  appearance: none;
+  flex: none;
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(1180px, calc(100vw - 48px));
-  height: min(860px, calc(100vh - 48px));
-  background: rgba(27, 26, 33, 0.98);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  border: 1px solid var(--stroke-strong);
+  cursor: pointer;
+  transition:
+    background var(--medium) var(--ease),
+    border-color var(--medium) var(--ease),
+    box-shadow var(--medium) var(--ease);
 }
 
-.controls {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--line);
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: transform var(--medium) var(--ease);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--accent-gradient);
+  border-color: transparent;
+}
+
+input[type="checkbox"]:checked::after {
+  transform: translateX(16px);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 102, 170, 0.3);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.primary {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 650;
+  box-shadow: 0 6px 18px rgba(255, 102, 170, 0.28);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  box-shadow: 0 8px 24px rgba(255, 102, 170, 0.42);
+  transform: translateY(-1px);
+}
+
+.quiet,
+.link,
+.drawer-toggle {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  color: var(--text-2);
+}
+
+.quiet:hover:not(:disabled),
+.link:hover:not(:disabled),
+.drawer-toggle:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: transparent;
+  color: var(--text);
 }
 
 .row {
@@ -140,57 +274,173 @@ kbd {
   gap: 10px;
 }
 
+/* Slim scrollbars that stay out of the way. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  background-clip: padding-box;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ---------- overlay ---------- */
+
+/* The window is exactly the glass card (the backend sizes it), so the panel just fills it. */
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  opacity: 0;
+  transform: translateY(8px) scale(0.99);
+  transition:
+    opacity var(--medium) var(--ease),
+    transform var(--slow) var(--ease);
+}
+
+.panel.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.controls {
+  display: grid;
+  gap: 10px;
+  padding: 16px 16px 12px;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-field svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--muted);
+  pointer-events: none;
+  transition: color var(--medium) var(--ease);
+}
+
+.search-field:focus-within svg {
+  color: var(--accent);
+}
+
+.search {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  font-size: 1.08rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.search::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search::placeholder {
+  color: var(--muted);
+}
+
+.close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--radius);
+  color: var(--text-2);
+}
+
 .filters {
   flex-wrap: wrap;
 }
 
-.search {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 14px;
-  font-size: 1.1em;
-}
-
-.close {
-  padding: 8px 12px;
-}
-
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .tabs button {
-  padding: 6px 12px;
+  padding: 5px 13px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.tabs button:hover:not(.on) {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .tabs button.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1b1a21;
-  font-weight: 600;
-}
-
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  font-weight: 650;
+  box-shadow: 0 2px 10px rgba(255, 102, 170, 0.35);
 }
 
 .tip {
-  margin: 0;
-  padding: 8px 16px;
-  background: rgba(255, 204, 102, 0.1);
+  margin: 0 16px 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 210, 122, 0.25);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 210, 122, 0.08);
   color: var(--warn);
-  border-bottom: 1px solid var(--line);
+  animation: rise var(--slow) var(--ease) both;
 }
 
+/* The one part of the card that grows and scrolls; the controls and status bar keep their size. */
 .results {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px 18px;
+  padding: 6px 16px 18px;
+}
+
+.controls,
+.tip,
+.statusbar {
+  flex: none;
 }
 
 .grid {
@@ -207,7 +457,7 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 18px;
+  padding: 22px;
   color: var(--muted);
 }
 
@@ -219,23 +469,44 @@ kbd {
   height: 1px;
 }
 
+/* ---------- cards ---------- */
+
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border: 2px solid transparent;
-  border-radius: 10px;
   overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  animation: rise var(--slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 24ms);
+  transition:
+    transform var(--medium) var(--ease),
+    background var(--medium) var(--ease),
+    border-color var(--medium) var(--ease),
+    box-shadow var(--medium) var(--ease);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  background: var(--surface-hover);
+  border-color: var(--stroke-strong);
+  box-shadow: var(--shadow);
 }
 
 .card.selected {
-  border-color: var(--accent);
+  border-color: rgba(255, 102, 170, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(255, 102, 170, 0.55),
+    0 12px 30px rgba(255, 102, 170, 0.2);
 }
 
 .cover {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: #15141a;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .cover img {
@@ -243,21 +514,40 @@ kbd {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition:
+    transform 600ms var(--ease),
+    filter var(--medium) var(--ease);
+}
+
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 60%;
+  background: linear-gradient(to top, rgba(10, 8, 18, 0.82), transparent);
+  pointer-events: none;
+}
+
+.card:hover .cover img {
+  transform: scale(1.06);
 }
 
 .card.installed .cover img {
-  filter: saturate(0.45) brightness(0.8);
+  filter: saturate(0.4) brightness(0.75);
 }
 
 .badge {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 1px 8px;
+  z-index: 1;
+  left: 10px;
+  bottom: 9px;
+  padding: 2px 9px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.7);
-  font-size: 0.78rem;
-  font-weight: 600;
+  background: rgba(10, 8, 18, 0.62);
+  border: 1px solid var(--stroke);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
 }
 
 .status-ranked,
@@ -270,7 +560,7 @@ kbd {
 }
 
 .status-qualified {
-  color: #5cc8ff;
+  color: var(--info);
 }
 
 .status-pending,
@@ -284,21 +574,38 @@ kbd {
 
 .play {
   position: absolute;
-  right: 8px;
-  top: 8px;
+  z-index: 1;
+  right: 10px;
+  top: 10px;
   width: 34px;
   height: 34px;
   padding: 0;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
-  border-color: rgba(255, 255, 255, 0.25);
-  font-size: 0.8rem;
+  background: rgba(10, 8, 18, 0.62);
+  border-color: rgba(255, 255, 255, 0.28);
+  font-size: 0.75rem;
+  opacity: 0;
+  transform: scale(0.85);
+}
+
+.card:hover .play,
+.card.selected .play,
+.play.on,
+.play:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.play:hover:not(:disabled) {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--on-accent);
 }
 
 .play.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1b1a21;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--on-accent);
 }
 
 .body {
@@ -306,11 +613,13 @@ kbd {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  padding: 10px 12px 6px;
+  padding: 11px 13px 6px;
 }
 
 .title {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.02rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -323,10 +632,14 @@ kbd {
   white-space: nowrap;
 }
 
+.artist {
+  color: var(--text-2);
+}
+
 .mapper,
 .stats {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
 .dots {
@@ -334,14 +647,19 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin: 6px 0 2px;
+  margin: 7px 0 3px;
 }
 
 .dot {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: transform var(--fast) var(--ease);
+}
+
+.dot:hover {
+  transform: scale(1.35);
 }
 
 .more {
@@ -356,34 +674,72 @@ kbd {
 }
 
 .action {
-  margin: 6px 12px 12px;
-  background: var(--panel-2);
+  margin: 6px 13px 13px;
+  padding: 9px 12px;
+  background: var(--surface-strong);
   font-weight: 600;
 }
 
+.action:hover:not(:disabled) {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--on-accent);
+  box-shadow: 0 6px 18px rgba(255, 102, 170, 0.3);
+}
+
 .action.busy {
-  background: linear-gradient(to right, rgba(255, 102, 170, 0.5) var(--fill, 0%), var(--panel-2) var(--fill, 0%));
-  border-color: var(--accent);
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 102, 170, 0.6);
+  background: linear-gradient(to right, rgba(255, 102, 170, 0.5) var(--fill, 0%), var(--surface-strong) var(--fill, 0%));
+}
+
+.action.busy:hover:not(:disabled) {
+  background: linear-gradient(to right, rgba(255, 102, 170, 0.6) var(--fill, 0%), var(--surface-hover) var(--fill, 0%));
+  color: var(--text);
+  box-shadow: none;
 }
 
 .action.installed,
 .action.sent {
+  background: rgba(110, 231, 168, 0.1);
+  border-color: rgba(110, 231, 168, 0.28);
   color: var(--good);
+  opacity: 1;
 }
 
 .action.failed {
   color: var(--bad);
-  border-color: var(--bad);
+  border-color: rgba(255, 125, 138, 0.5);
 }
+
+/* Placeholder cards while the first results load. The sweep is a compositor-only transform. */
+.card.ghost {
+  min-height: 250px;
+  animation: rise var(--slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.card.ghost::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.07) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: sweep 1.4s var(--ease) infinite;
+}
+
+/* ---------- status bar and downloads ---------- */
 
 .statusbar {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--line);
+  padding: 9px 16px;
+  border-top: 1px solid var(--stroke);
+  background: rgba(0, 0, 0, 0.14);
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
 .keys {
@@ -393,32 +749,31 @@ kbd {
 .drawer {
   position: absolute;
   right: 16px;
-  bottom: 44px;
-  width: 340px;
+  bottom: 46px;
+  width: 350px;
   max-height: 55%;
   overflow-y: auto;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  background: rgba(24, 21, 36, 0.86);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  animation: rise var(--slow) var(--ease) both;
+}
+
+html[data-glass="off"] .drawer {
+  background: rgb(34, 31, 48);
 }
 
 .drawer > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 6px 8px 6px 12px;
-  position: sticky;
-  top: 0;
-  background: var(--panel-2);
-}
-
-.drawer-toggle,
-.link,
-.quiet {
-  background: none;
-  border: none;
-  padding: 4px 6px;
+  background: rgba(24, 21, 36, 0.95);
+  border-bottom: 1px solid var(--stroke);
 }
 
 .link {
@@ -429,9 +784,9 @@ kbd {
 .drawer ul {
   list-style: none;
   margin: 0;
-  padding: 0 12px 10px;
+  padding: 10px 12px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .job-line {
@@ -467,15 +822,15 @@ kbd {
 
 .bar {
   height: 4px;
-  margin-top: 4px;
+  margin-top: 6px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--accent) var(--fill), var(--line) var(--fill));
+  background: linear-gradient(to right, var(--accent) var(--fill), rgba(255, 255, 255, 0.14) var(--fill));
 }
 
 .job-actions {
   display: flex;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .job-actions button {
@@ -486,44 +841,115 @@ kbd {
 /* ---------- settings window ---------- */
 
 .home {
-  max-width: 520px;
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 24px 22px 28px;
+  padding: 22px 24px 28px;
+}
+
+.home > * {
+  animation: rise var(--slow) var(--ease) both;
+}
+
+.home > :nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.home > :nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.home > :nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.home > :nth-child(5) {
+  animation-delay: 160ms;
+}
+
+.home > :nth-child(6) {
+  animation-delay: 200ms;
+}
+
+.home > :nth-child(n + 7) {
+  animation-delay: 240ms;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  flex: none;
+  filter: drop-shadow(0 6px 14px rgba(167, 123, 255, 0.35));
 }
 
 .home h1 {
-  margin: 0 0 6px;
-  font-size: 1.6rem;
-}
-
-.home h2 {
-  margin: 0 0 8px;
-  font-size: 1rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.home section {
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
-.home p {
-  margin: 6px 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .lead {
-  font-size: 1.05rem;
+  margin: 2px 0 0;
+  color: var(--text-2);
 }
 
-.primary {
-  margin-top: 8px;
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1b1a21;
-  font-weight: 700;
+.home .primary {
+  justify-self: start;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+}
+
+.group {
+  padding: 14px 18px 16px;
+  background: var(--surface);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+}
+
+.group h2 {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.group p {
+  margin: 6px 0;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--stroke);
+}
+
+.setting-text {
+  display: grid;
+  gap: 1px;
+}
+
+.setting-text small {
+  color: var(--muted);
 }
 
 .hotkey-row {
@@ -536,23 +962,20 @@ kbd {
   min-width: 0;
   font-family: "Cascadia Mono", Consolas, monospace;
   cursor: pointer;
-}
-
-.foot {
-  margin-top: 28px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.ok-text {
-  color: var(--good);
+  text-align: center;
+  letter-spacing: 0.04em;
 }
 
 .steps {
-  margin: 8px 0;
-  padding-left: 22px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  margin: 10px 0;
+  padding-left: 22px;
+  color: var(--text-2);
+}
+
+.steps li {
+  transition: color var(--medium) var(--ease);
 }
 
 .steps li.ok {
@@ -563,27 +986,26 @@ kbd {
   content: "✓  ";
 }
 
-/* ---------- link toast ---------- */
-
-/* The toast window is transparent and undecorated; only the card is drawn. */
-html[data-window="toast"],
-html[data-window="toast"] body {
-  background: transparent;
-  overflow: hidden;
+.foot {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
+/* ---------- link toast ---------- */
+
+/* The toast window is the glass card; the page only draws its content. */
 .toast {
-  height: calc(100% - 12px);
-  margin: 6px;
-  padding: 10px 12px;
+  height: 100%;
+  padding: 12px 14px;
   display: grid;
   grid-template-rows: auto auto auto 1fr;
   gap: 2px;
-  background: rgba(36, 35, 44, 0.98);
-  border: 1px solid var(--line);
+  border: 1px solid var(--stroke);
   border-left: 4px solid var(--accent);
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  animation: rise var(--slow) var(--ease) both;
+  transition: border-color var(--medium) var(--ease);
 }
 
 .toast.done,
@@ -603,13 +1025,14 @@ html[data-window="toast"] body {
 }
 
 .toast-title {
+  font-family: var(--font-display);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .toast-line {
-  color: var(--muted);
+  color: var(--text-2);
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -627,4 +1050,14 @@ html[data-window="toast"] body {
 .toast-actions button {
   padding: 3px 10px;
   font-size: 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

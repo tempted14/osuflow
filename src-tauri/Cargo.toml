@@ -1,8 +1,8 @@
 [package]
-name = "quickdirect"
+name = "osuflow"
 version = "0.1.0"
 description = "osu!direct-style beatmap search and download overlay for osu! stable"
-authors = ["QuickDirect contributors"]
+authors = ["osu!flow contributors"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2024"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "quickdirect_lib"
+name = "osuflow_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -43,7 +43,7 @@ panic = "abort"
 strip = true
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System_Threading", "Win32_Graphics_Gdi"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_Controls"] }
 winreg = "0.56.0"
 
 [dev-dependencies]

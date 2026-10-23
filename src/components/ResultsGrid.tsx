@@ -15,6 +15,8 @@ interface Props {
   hasMore: boolean;
   loading: boolean;
   error: string | null;
+  /** While true the cards show no cover images, so the window doesn't keep them decoded in memory. */
+  releaseCovers?: boolean;
   /** Told how many columns fit, so arrow-key navigation matches what is on screen. */
   onColumnsChange: (columns: number) => void;
   onLoadMore: () => void;
@@ -73,6 +75,14 @@ export function ResultsGrid(props: Props) {
           <button onClick={props.onRetry}>Try again</button>
         </div>
       )}
+      {props.loading && sets.length === 0 && !props.error && (
+        // Placeholders keep the layout steady (and the window alive) while the first results load.
+        <ul className="grid" style={{ "--gap": `${GAP}px`, "--min-card": `${MIN_CARD_WIDTH}px` } as CSSProperties} aria-hidden>
+          {Array.from({ length: 6 }, (_, index) => (
+            <li key={index} className="card ghost" style={{ "--i": index } as CSSProperties} />
+          ))}
+        </ul>
+      )}
       <ul className="grid" style={{ "--gap": `${GAP}px`, "--min-card": `${MIN_CARD_WIDTH}px` } as CSSProperties}>
         {sets.map((set, index) => (
           <BeatmapCard
@@ -83,6 +93,7 @@ export function ResultsGrid(props: Props) {
             job={props.jobFor.get(set.id)}
             selected={index === selected}
             playing={props.playingId === set.id}
+            releaseCover={props.releaseCovers}
             onDownload={() => props.onDownload(set)}
             onCancel={() => props.onCancel(set.id)}
             onPreview={() => props.onPreview(set)}
@@ -93,7 +104,7 @@ export function ResultsGrid(props: Props) {
       {!props.loading && !props.error && sets.length === 0 && (
         <div className="notice">No maps match. Try fewer words, another status, or all modes.</div>
       )}
-      {props.loading && <div className="notice">Searching…</div>}
+      {props.loading && sets.length > 0 && <div className="notice">Loading more…</div>}
       {hasMore && <div className="sentinel" ref={sentinel} aria-hidden />}
     </div>
   );

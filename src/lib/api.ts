@@ -5,6 +5,8 @@ import type {
   HotkeyStatus,
   ImportMethod,
   LinkHandlerStatus,
+  LinkToast,
+  NameHint,
   OsuInstall,
   SearchQuery,
   SearchResponse,
@@ -13,9 +15,12 @@ import type {
 
 export const search = (query: SearchQuery) => invoke<SearchResponse>("search", { query });
 
-/** Resolves once the map has been handed to osu!; progress arrives as `download-*` events. */
-export const downloadBeatmapset = (setId: number) =>
-  invoke<ImportMethod>("download_beatmapset", { setId });
+/**
+ * Resolves once the map has been handed to osu!; progress arrives as `download-*` events.
+ * Passing the artist and title saves the backend a lookup it would otherwise make to name the file.
+ */
+export const downloadBeatmapset = (setId: number, hint?: NameHint) =>
+  invoke<ImportMethod>("download_beatmapset", { setId, artist: hint?.artist ?? null, title: hint?.title ?? null });
 
 export const cancelDownload = (setId: number) => invoke<boolean>("cancel_download", { setId });
 
@@ -47,16 +52,22 @@ export const openBeatmapsetPage = (setId: number) =>
 
 export const getLinkHandlerStatus = () => invoke<LinkHandlerStatus>("get_link_handler_status");
 
-/** Registers QuickDirect as a selectable browser (or switches handling off). */
+/** Registers osu!flow as a selectable browser (or switches handling off). */
 export const setLinkHandler = (enabled: boolean) =>
   invoke<LinkHandlerStatus>("set_link_handler", { enabled });
 
-/** Rejects while QuickDirect is still the default browser. */
+/** Rejects while osu!flow is still the default browser. */
 export const removeLinkRegistration = () => invoke<LinkHandlerStatus>("remove_link_registration");
 
 export const openDefaultApps = () => invoke<void>("open_default_apps");
+
+/** Whether osu!flow starts quietly in the tray when Windows starts. */
+export const getAutostart = () => invoke<boolean>("get_autostart");
+export const setAutostart = (enabled: boolean) => invoke<boolean>("set_autostart", { enabled });
 
 /** The toast's buttons: open the clicked link in the user's browser, retry it, or hide the toast. */
 export const toastOpenPage = (url: string) => invoke<void>("toast_open_page", { url });
 export const toastRetry = (url: string) => invoke<void>("toast_retry", { url });
 export const dismissToast = () => invoke<void>("dismiss_toast");
+/** The toast on screen right now, for a toast window that was built after the event was sent. */
+export const getCurrentToast = () => invoke<LinkToast | null>("get_current_toast");

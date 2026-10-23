@@ -83,6 +83,8 @@ export function BeatmapCard(props: {
   job: DownloadJob | undefined;
   selected: boolean;
   playing: boolean;
+  /** Leave the cover image out, so it isn't held decoded while the overlay is hidden. */
+  releaseCover?: boolean;
   onDownload: () => void;
   onCancel: () => void;
   onPreview: () => void;
@@ -96,10 +98,12 @@ export function BeatmapCard(props: {
       className={classes.filter(Boolean).join(" ")}
       data-index={props.index}
       aria-selected={props.selected}
+      // Cards fade up one after another; the delay is capped so a long page doesn't crawl in.
+      style={{ "--i": Math.min(props.index, 14) } as CSSProperties}
       onMouseDown={props.onSelect}
     >
       <div className="cover">
-        {cover && <img src={cover} alt="" loading="lazy" draggable={false} />}
+        {cover && !props.releaseCover && <img src={cover} alt="" loading="lazy" draggable={false} />}
         <span className={`badge status-${set.status}`}>{statusLabel(set.status)}</span>
         <button
           className={`play${props.playing ? " on" : ""}`}

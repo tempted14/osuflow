@@ -1,23 +1,25 @@
-//! The opt-in link handler: what happens when Windows passes QuickDirect a link because it is
+//! The opt-in link handler: what happens when Windows passes osu!flow a link because it is
 //! the default browser.
 //!
 //! Beatmap links download the map through the same guarded pipeline the overlay uses and show a
 //! small toast; every other link - and every link while the handler is switched off - goes
-//! straight to the browser QuickDirect replaced.
+//! straight to the browser osu!flow replaced.
 
 use crate::{
     browser::{self, Registry},
     commands::{self, AppState},
+    downloader::NameHint,
     error::{AppError, Result},
     importer::ImportMethod,
     library,
     link_url::{self, LinkTarget},
     osu_locator,
     settings::Settings,
+    ui,
 };
 use reqwest::Url;
 use serde::Serialize;
-use std::{path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, sync::Mutex, time::Duration};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
 
 pub const TOAST_LABEL: &str = "toast";
@@ -68,7 +70,11 @@ pub(crate) trait LinkEnv {
     async fn resolve_set_id(&self, beatmap_id: u32) -> Result<u32>;
     async fn set_label(&self, set_id: u32) -> Option<String>;
     async fn is_installed(&self, set_id: u32) -> bool;
-    async fn download(&self, set_id: u32) -> Result<ImportMethod>;
+    /// The artist and title the download can name its file after, once `set_label` has found them.
+    fn name_hint(&self, _set_id: u32) -> Option<NameHint> {
+        None
+    }
+    async fn download(&self, set_id: u32, hint: Option<NameHint>) -> Result<ImportMethod>;
     fn forward(&self, url: &Url);
     fn toast(&self, toast: LinkToast);
 }
@@ -112,7 +118,7 @@ pub(crate) async fn process_link<E: LinkEnv>(env: &E, enabled: bool, url: Url) {
     }
 
     env.toast(LinkToast::new(ToastState::Working, Some(set_id), &label, Some("Downloading…"), &url));
-    let finished = match env.download(set_id).await {
+    let finished = match env.download(set_id, env.name_hint(set_id)).await {
         Ok(method) => LinkToast::new(ToastState::Done, Some(set_id), &label, Some(done_message(method)), &url),
         Err(error) => LinkToast::new(ToastState::Failed, Some(set_id), &label, Some(&error.to_string()), &url),
     };
@@ -120,7 +126,14 @@ pub(crate) async fn process_link<E: LinkEnv>(env: &E, enabled: bool, url: Url) {
 }
 
 /// The real thing: mirrors, the library, the guarded hand-off and the toast window.
-struct AppLinkEnv(AppHandle);
+/// The second field remembers the names `set_label` found, so the download can reuse them.
+struct AppLinkEnv(AppHandle, Mutex<HashMap<u32, NameHint>>);
+
+impl AppLinkEnv {
+    fn new(app: AppHandle) -> Self {
+        Self(app, Mutex::default())
+    }
+}
 
 impl LinkEnv for AppLinkEnv {
     async fn resolve_set_id(&self, beatmap_id: u32) -> Result<u32> {
@@ -133,7 +146,16 @@ impl LinkEnv for AppLinkEnv {
         let state = self.0.state::<AppState>();
         let order = state.settings_snapshot().mirror_order;
         let lookup = tokio::time::timeout(LABEL_LOOKUP_TIMEOUT, state.mirrors.lookup_set(&order, set_id)).await;
-        lookup.ok()?.ok().map(|set| format!("{} – {}", set.artist, set.title))
+        let set = lookup.ok()?.ok()?;
+        self.1
+            .lock()
+            .unwrap()
+            .insert(set_id, NameHint { artist: set.artist.clone(), title: set.title.clone() });
+        Some(format!("{} – {}", set.artist, set.title))
+    }
+
+    fn name_hint(&self, set_id: u32) -> Option<NameHint> {
+        self.1.lock().unwrap().get(&set_id).cloned()
     }
 
     async fn is_installed(&self, set_id: u32) -> bool {
@@ -145,8 +167,8 @@ impl LinkEnv for AppLinkEnv {
         .unwrap_or(false)
     }
 
-    async fn download(&self, set_id: u32) -> Result<ImportMethod> {
-        commands::download_and_import(&self.0.state::<AppState>(), set_id).await
+    async fn download(&self, set_id: u32, hint: Option<NameHint>) -> Result<ImportMethod> {
+        commands::download_and_import(&self.0.state::<AppState>(), set_id, hint).await
     }
 
     fn forward(&self, url: &Url) {
@@ -168,11 +190,11 @@ pub fn handle_url(app: &AppHandle, url: Url) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let enabled = app.state::<AppState>().settings_snapshot().link_handler;
-        process_link(&AppLinkEnv(app.clone()), enabled, url).await;
+        process_link(&AppLinkEnv::new(app.clone()), enabled, url).await;
     });
 }
 
-/// Opens `url` in the browser QuickDirect replaced (or a well-known fallback).
+/// Opens `url` in the browser osu!flow replaced (or a well-known fallback).
 pub fn forward_url(app: &AppHandle, url: &Url) -> Result<()> {
     let saved = app.state::<AppState>().settings_snapshot().previous_browser;
     let me = std::env::current_exe()?;
@@ -182,13 +204,27 @@ pub fn forward_url(app: &AppHandle, url: &Url) -> Result<()> {
     Ok(())
 }
 
+/// The toast on screen right now, so a toast window that was only just built (its page may not be
+/// listening yet) can ask for it instead of missing the event.
+static CURRENT_TOAST: Mutex<Option<LinkToast>> = Mutex::new(None);
+
+#[tauri::command]
+pub fn get_current_toast() -> Option<LinkToast> {
+    CURRENT_TOAST.lock().unwrap().clone()
+}
+
 fn show_toast(app: &AppHandle, toast: &LinkToast) {
-    let Some(window) = app.get_webview_window(TOAST_LABEL) else { return };
-    let _ = app.emit_to(TOAST_LABEL, "link-toast", toast);
     if toast.state == ToastState::Hidden {
-        let _ = window.hide();
+        *CURRENT_TOAST.lock().unwrap() = None;
+        if let Some(window) = app.get_webview_window(TOAST_LABEL) {
+            let _ = window.hide();
+        }
         return;
     }
+    *CURRENT_TOAST.lock().unwrap() = Some(toast.clone());
+    // Built on first use when link handling was switched on after start-up.
+    let Some(window) = ui::ensure(app, TOAST_LABEL) else { return };
+    let _ = app.emit_to(TOAST_LABEL, "link-toast", toast);
     place_toast(app, &window);
     // Never `set_focus`: the toast also isn't focusable (tauri.conf.json), so appearing over a
     // game must not pull keyboard focus away from it.
@@ -212,7 +248,7 @@ fn place_toast(app: &AppHandle, window: &tauri::WebviewWindow) {
 pub struct LinkHandlerStatus {
     /// The user's switch.
     pub enabled: bool,
-    /// QuickDirect is listed as a browser in Windows' Default apps.
+    /// osu!flow is listed as a browser in Windows' Default apps.
     pub registered: bool,
     /// The user has actually chosen it there - the step Windows won't let an app do for them.
     pub is_default: bool,
@@ -228,7 +264,7 @@ pub fn status_for(settings: &Settings, registry: &Registry, me: &Path) -> LinkHa
     }
 }
 
-/// Switches the handler on or off. Switching on registers QuickDirect as a browser and
+/// Switches the handler on or off. Switching on registers osu!flow as a browser and
 /// remembers the browser it will replace; switching off keeps the registration (and the
 /// remembered browser) so links keep working until the user picks their browser again.
 pub fn apply_link_handler(
@@ -238,7 +274,7 @@ pub fn apply_link_handler(
     exe: &Path,
 ) -> std::io::Result<Settings> {
     if enabled {
-        // None when QuickDirect already is the default (switching back on): keep what we had.
+        // None when osu!flow already is the default (switching back on): keep what we had.
         let replaced = registry.default_browser(exe);
         registry.register(exe)?;
         if replaced.is_some() {
@@ -254,7 +290,7 @@ pub fn apply_link_handler(
 pub fn remove_registration(registry: &Registry, mut settings: Settings, me: &Path) -> Result<Settings> {
     if registry.is_default(me) {
         return Err(AppError::Task(
-            "QuickDirect is still your default browser. Choose another browser in Default apps first, otherwise links will stop opening."
+            "osu!flow is still your default browser. Choose another browser in Default apps first, otherwise links will stop opening."
                 .into(),
         ));
     }
@@ -281,6 +317,8 @@ pub fn set_link_handler(app: AppHandle, state: State<'_, AppState>, enabled: boo
     let exe = std::env::current_exe()?;
     let settings = apply_link_handler(&registry, state.settings_snapshot(), enabled, &exe)?;
     commit_settings(&app, &state, settings)?;
+    // The toast's web view only exists while link handling is on.
+    ui::sync_toast_window(&app, enabled);
     Ok(status_for(&state.settings_snapshot(), &registry, &exe))
 }
 
@@ -290,10 +328,11 @@ pub fn remove_link_registration(app: AppHandle, state: State<'_, AppState>) -> R
     let exe = std::env::current_exe()?;
     let settings = remove_registration(&registry, state.settings_snapshot(), &exe)?;
     commit_settings(&app, &state, settings)?;
+    ui::sync_toast_window(&app, false);
     Ok(status_for(&state.settings_snapshot(), &registry, &exe))
 }
 
-/// Opens Windows' Default apps, straight to QuickDirect's entry where the version allows.
+/// Opens Windows' Default apps, straight to osu!flow's entry where the version allows.
 #[tauri::command]
 pub fn open_default_apps(app: AppHandle) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
@@ -342,6 +381,7 @@ mod tests {
         installed: bool,
         download_error: Option<&'static str>,
         method: ImportMethod,
+        hint: Option<NameHint>,
     }
 
     impl Fake {
@@ -353,6 +393,7 @@ mod tests {
                 installed: false,
                 download_error: None,
                 method: ImportMethod::LaunchedOsu,
+                hint: None,
             }
         }
 
@@ -379,8 +420,15 @@ mod tests {
             self.installed
         }
 
-        async fn download(&self, set_id: u32) -> Result<ImportMethod> {
-            self.log(format!("download {set_id}"));
+        fn name_hint(&self, _set_id: u32) -> Option<NameHint> {
+            self.hint.clone()
+        }
+
+        async fn download(&self, set_id: u32, hint: Option<NameHint>) -> Result<ImportMethod> {
+            match hint {
+                Some(hint) => self.log(format!("download {set_id} named {} - {}", hint.artist, hint.title)),
+                None => self.log(format!("download {set_id}")),
+            }
             match self.download_error {
                 Some(message) => Err(AppError::Task(message.into())),
                 None => Ok(self.method),
@@ -434,6 +482,13 @@ mod tests {
                 "toast Done [xi – FREEDOM DiVE] Added to osu!",
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn the_name_found_for_the_toast_is_handed_to_the_download() {
+        let env = Fake { hint: Some(NameHint { artist: "xi".into(), title: "FREEDOM DiVE".into() }), ..Fake::new() };
+        process_link(&env, true, url("https://osu.ppy.sh/beatmapsets/39804")).await;
+        assert!(env.entries().contains(&"download 39804 named xi - FREEDOM DiVE".to_string()), "{:?}", env.entries());
     }
 
     #[tokio::test]
@@ -519,7 +574,7 @@ mod tests {
         use crate::browser::sandbox;
         use std::path::PathBuf;
 
-        const EXE: &str = r"C:\Apps\QuickDirect\quickdirect.exe";
+        const EXE: &str = r"C:\Apps\osu!flow\osuflow.exe";
         const CHROME: &str = r"C:\Browsers\chrome.exe";
 
         #[test]
@@ -533,11 +588,11 @@ mod tests {
         }
 
         #[test]
-        fn switching_back_on_while_quickdirect_is_the_default_keeps_the_remembered_browser() {
+        fn switching_back_on_while_osuflow_is_the_default_keeps_the_remembered_browser() {
             let (registry, _guard) = sandbox();
             registry.pretend_default(Some(CHROME));
             let first = apply_link_handler(&registry, Settings::default(), true, Path::new(EXE)).unwrap();
-            registry.pretend_default(Some(EXE)); // the user has now chosen QuickDirect
+            registry.pretend_default(Some(EXE)); // the user has now chosen osu!flow
             let off = apply_link_handler(&registry, first, false, Path::new(EXE)).unwrap();
             let again = apply_link_handler(&registry, off, true, Path::new(EXE)).unwrap();
             assert_eq!(again.previous_browser, Some(PathBuf::from(r"C:\Browsers\chrome.exe")));

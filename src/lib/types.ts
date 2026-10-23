@@ -149,6 +149,12 @@ export interface DownloadProgressEvent {
 
 export type ImportMethod = "launchedOsu" | "movedToSongs";
 
+/** What the archive is named after, when the caller already has the map's details. */
+export interface NameHint {
+  artist: string;
+  title: string;
+}
+
 export type ToastState = "resolving" | "installed" | "working" | "done" | "failed" | "hidden";
 
 /** Payload of the `link-toast` event: what the corner toast shows for a clicked beatmap link. */
@@ -164,9 +170,9 @@ export interface LinkToast {
 export interface LinkHandlerStatus {
   /** The user's switch. */
   enabled: boolean;
-  /** QuickDirect is listed as a browser in Windows' Default apps. */
+  /** osu!flow is listed as a browser in Windows' Default apps. */
   registered: boolean;
-  /** The user has chosen QuickDirect there - the one step Windows won't let an app do. */
+  /** The user has chosen osu!flow there - the one step Windows won't let an app do. */
   isDefault: boolean;
   previousBrowser: string | null;
 }

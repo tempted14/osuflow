@@ -9,7 +9,7 @@ import {
   removeJob,
   upsertJob,
 } from "../lib/jobs";
-import type { DownloadJob, DownloadProgressEvent, DownloadStateEvent } from "../lib/types";
+import type { DownloadJob, DownloadProgressEvent, DownloadStateEvent, NameHint } from "../lib/types";
 
 /** Every download this window knows about, driven by the backend's `download-*` events. */
 export function useDownloads() {
@@ -31,13 +31,17 @@ export function useDownloads() {
     };
   }, []);
 
-  const start = useCallback((setId: number, label: string) => {
+  // What each set's file is named after, remembered so a retry keeps it.
+  const hints = useRef(new Map<number, NameHint>());
+
+  const start = useCallback((setId: number, label: string, hint?: NameHint) => {
     // The backend refuses a second download of the same set, so don't ask while one is running.
     if (latest.current.some((job) => job.setId === setId && isBusy(job))) return;
+    if (hint) hints.current.set(setId, hint);
     setJobs((all) =>
       upsertJob(all, setId, { label, state: "queued", received: 0, total: null, error: null, mirror: null }),
     );
-    api.downloadBeatmapset(setId).catch((error) => {
+    api.downloadBeatmapset(setId, hints.current.get(setId)).catch((error) => {
       const message = String(error);
       const cancelled = message.includes("cancelled");
       setJobs((all) =>

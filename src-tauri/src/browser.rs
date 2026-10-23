@@ -1,8 +1,8 @@
-//! Browser plumbing for the link handler: registering QuickDirect as a browser Windows can
+//! Browser plumbing for the link handler: registering osu!flow as a browser Windows can
 //! offer in Default apps, finding the browser it replaced, and passing ordinary links on to it.
 //!
 //! Windows doesn't let a program make itself the default browser - the user has to choose it
-//! in Default apps - so registering only makes QuickDirect *selectable*. Registration is
+//! in Default apps - so registering only makes osu!flow *selectable*. Registration is
 //! written under HKEY_CURRENT_USER (no administrator rights), and the registry root is a
 //! parameter so tests use a throwaway key and never touch a real browser registration.
 //!
@@ -17,12 +17,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub const APP_NAME: &str = "QuickDirect";
-/// The class Windows uses for http(s) links while QuickDirect is the default browser.
-pub const PROG_ID: &str = "QuickDirectURL";
+pub const APP_NAME: &str = "osu!flow";
+/// The class Windows uses for http(s) links while osu!flow is the default browser.
+pub const PROG_ID: &str = "OsuFlowURL";
 
-const CLIENT_KEY: &str = r"Software\Clients\StartMenuInternet\QuickDirect";
-const CAPABILITIES_KEY: &str = r"Software\Clients\StartMenuInternet\QuickDirect\Capabilities";
+const CLIENT_KEY: &str = r"Software\Clients\StartMenuInternet\osuflow";
+const CAPABILITIES_KEY: &str = r"Software\Clients\StartMenuInternet\osuflow\Capabilities";
 const REGISTERED_APPS_KEY: &str = r"Software\RegisteredApplications";
 
 #[cfg(windows)]
@@ -87,7 +87,7 @@ mod windows_registry {
     }
 
     pub struct Registry {
-        /// Where QuickDirect registers itself: HKEY_CURRENT_USER in the app, a throwaway key
+        /// Where osu!flow registers itself: HKEY_CURRENT_USER in the app, a throwaway key
         /// in tests.
         user: RegKey,
         default_source: DefaultSource,
@@ -105,13 +105,13 @@ mod windows_registry {
             Self { user: RegKey::predef(HKEY_CURRENT_USER), default_source: DefaultSource::Shell }
         }
 
-        /// Makes QuickDirect appear in Windows' Default apps as a browser. Safe to repeat; a
+        /// Makes osu!flow appear in Windows' Default apps as a browser. Safe to repeat; a
         /// changed `exe` path overwrites the old one.
         pub fn register(&self, exe: &Path) -> io::Result<()> {
             let exe = exe.display().to_string();
 
             let (class, _) = self.user.create_subkey(format!(r"Software\Classes\{PROG_ID}"))?;
-            class.set_value("", &"QuickDirect URL")?;
+            class.set_value("", &"osu!flow URL")?;
             class.create_subkey("DefaultIcon")?.0.set_value("", &format!("{exe},0"))?;
             class
                 .create_subkey(r"shell\open\command")?
@@ -190,7 +190,7 @@ mod windows_registry {
             let hkcu = RegKey::predef(HKEY_CURRENT_USER);
             let _ = hkcu.delete_subkey_all(&self.0);
             // Removes the shared parent too once nothing else is using it.
-            let _ = hkcu.delete_subkey(r"Software\QuickDirectTests");
+            let _ = hkcu.delete_subkey(r"Software\OsuFlowTests");
         }
     }
 
@@ -204,7 +204,7 @@ mod windows_registry {
         };
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
-            r"Software\QuickDirectTests\{}-{}",
+            r"Software\OsuFlowTests\{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
@@ -217,7 +217,7 @@ mod windows_registry {
     mod tests {
         use super::*;
 
-        const EXE: &str = r"C:\Apps\QuickDirect\quickdirect.exe";
+        const EXE: &str = r"C:\Apps\osu!flow\osuflow.exe";
         const CHROME: &str = r"C:\Program Files\Google\Chrome\Application\chrome.exe";
 
         #[test]
@@ -255,14 +255,14 @@ mod windows_registry {
         fn registering_again_updates_the_path_instead_of_failing() {
             let (registry, _guard) = sandbox();
             registry.register(Path::new(EXE)).unwrap();
-            registry.register(Path::new(r"D:\Moved\quickdirect.exe")).unwrap();
+            registry.register(Path::new(r"D:\Moved\osuflow.exe")).unwrap();
             let command: String = registry
                 .user
                 .open_subkey(format!(r"Software\Classes\{PROG_ID}\shell\open\command"))
                 .unwrap()
                 .get_value("")
                 .unwrap();
-            assert!(command.contains(r"D:\Moved\quickdirect.exe"), "{command}");
+            assert!(command.contains(r"D:\Moved\osuflow.exe"), "{command}");
         }
 
         #[test]
@@ -295,10 +295,10 @@ mod windows_registry {
         }
 
         #[test]
-        fn quickdirect_being_the_default_is_noticed_and_never_reported_as_the_old_browser() {
+        fn osuflow_being_the_default_is_noticed_and_never_reported_as_the_old_browser() {
             let (registry, _guard) = sandbox();
             // Same program, different spelling: Windows paths are case-insensitive.
-            registry.pretend_default(Some(r"c:\apps\quickdirect\QuickDirect.EXE"));
+            registry.pretend_default(Some(r"c:\apps\osu!flow\OsuFlow.EXE"));
             assert!(registry.is_default(Path::new(EXE)));
             assert_eq!(registry.default_browser(Path::new(EXE)), None);
         }
@@ -351,7 +351,7 @@ pub fn same_exe(a: &Path, b: &Path) -> bool {
 }
 
 /// The browser to pass links to: the saved one if it still exists, else the first usable
-/// fallback. QuickDirect itself is never chosen - opening a link with it would loop forever.
+/// fallback. osu!flow itself is never chosen - opening a link with it would loop forever.
 pub fn choose_browser(
     saved: Option<&Path>,
     fallbacks: &[PathBuf],
@@ -404,14 +404,14 @@ mod tests {
 
     #[test]
     fn exe_paths_compare_like_windows_does() {
-        assert!(same_exe(Path::new(r"C:\Apps\QD\quickdirect.exe"), Path::new(r"c:\apps\qd\QuickDirect.EXE")));
-        assert!(same_exe(Path::new(r"\\?\C:\Apps\quickdirect.exe"), Path::new(r"C:\Apps\quickdirect.exe")));
+        assert!(same_exe(Path::new(r"C:\Apps\QD\osuflow.exe"), Path::new(r"c:\apps\qd\OsuFlow.EXE")));
+        assert!(same_exe(Path::new(r"\\?\C:\Apps\osuflow.exe"), Path::new(r"C:\Apps\osuflow.exe")));
         assert!(!same_exe(Path::new(r"C:\Apps\a.exe"), Path::new(r"C:\Apps\b.exe")));
     }
 
     #[test]
     fn chooses_the_saved_browser_then_a_fallback_but_never_itself() {
-        let me = Path::new(r"C:\QD\quickdirect.exe");
+        let me = Path::new(r"C:\QD\osuflow.exe");
         let saved = PathBuf::from(r"C:\Browsers\chrome.exe");
         let fallbacks = [PathBuf::from(r"C:\Browsers\edge.exe"), PathBuf::from(r"C:\Browsers\firefox.exe")];
 
@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(choose_browser(None, &fallbacks, me, |p: &Path| p == fallbacks[1]), Some(fallbacks[1].clone()));
         assert_eq!(choose_browser(None, &fallbacks, me, |_: &Path| false), None);
 
-        // If the "saved" browser turns out to be QuickDirect, skip it - otherwise every link loops.
+        // If the "saved" browser turns out to be osu!flow, skip it - otherwise every link loops.
         assert_eq!(choose_browser(Some(me), &fallbacks, me, everything_exists), Some(fallbacks[0].clone()));
         let only_me = [me.to_path_buf()];
         assert_eq!(choose_browser(Some(me), &only_me, me, everything_exists), None);

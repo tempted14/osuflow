@@ -49,7 +49,7 @@ export function toastLine(
 export type LinkMode =
   /** Switched off and not the default browser: nothing is happening. */
   | "off"
-  /** Switched on, but the user hasn't chosen QuickDirect in Default apps yet. */
+  /** Switched on, but the user hasn't chosen osu!flow in Default apps yet. */
   | "waiting"
   /** Switched on and chosen: beatmap links are downloaded. */
   | "active"
