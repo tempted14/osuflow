@@ -1,0 +1,141 @@
+:root {
+  font-family: Inter, Avenir, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #f2f2f6;
+  background-color: #1c1b22;
+  color-scheme: dark;
+  --accent: #ff66aa;
+  --panel: #2a2933;
+  --muted: #9a98a8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+
+h1 small {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+code {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+.error {
+  color: #ff8080;
+}
+
+.controls,
+.manual {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+
+.controls input {
+  flex: 1;
+}
+
+input:not([type="checkbox"]),
+select,
+button {
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid #3d3c4a;
+  border-radius: 8px;
+}
+
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: var(--panel);
+  border-radius: 10px;
+}
+
+.card img {
+  width: 96px;
+  height: 64px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #15141a;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.meta .error {
+  color: #ff8080;
+}

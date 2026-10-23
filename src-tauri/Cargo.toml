@@ -1,0 +1,47 @@
+[package]
+name = "quickdirect"
+version = "0.1.0"
+description = "osu!direct-style beatmap search and download overlay for osu! stable"
+authors = ["QuickDirect contributors"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "quickdirect_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "io-util"] }
+tokio-util = "0.7.20"
+futures-util = "0.3.34"
+thiserror = "2.0.21"
+percent-encoding = "2.3.2"
+sysinfo = "0.39.6"
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "stream", "json"] }
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[target."cfg(windows)".dependencies]
+winreg = "0.56.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+wiremock = "0.6.5"
