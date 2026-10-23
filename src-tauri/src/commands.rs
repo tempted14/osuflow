@@ -32,7 +32,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    fn settings_snapshot(&self) -> Settings {
+    pub(crate) fn settings_snapshot(&self) -> Settings {
         self.settings.read().unwrap().clone()
     }
 }
@@ -61,6 +61,12 @@ pub async fn search(state: State<'_, AppState>, query: SearchQuery) -> Result<Se
 /// osu! is busy or never imports it, the error says so and the download is kept.
 #[tauri::command]
 pub async fn download_beatmapset(state: State<'_, AppState>, set_id: u32) -> Result<ImportMethod> {
+    download_and_import(&state, set_id).await
+}
+
+/// The whole pipeline - download, guarded hand-off, progress events - shared by the overlay and
+/// the link handler.
+pub async fn download_and_import(state: &AppState, set_id: u32) -> Result<ImportMethod> {
     let settings = state.settings_snapshot();
     let archive = state
         .downloader

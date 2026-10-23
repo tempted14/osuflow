@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { KeyboardEvent } from "react";
 import * as api from "../lib/api";
+import { LinkSettings } from "../components/LinkSettings";
 import { useSettings } from "../hooks/useSettings";
 import { hotkeyFromEvent } from "../lib/hotkey";
 import type { HotkeyStatus, OsuInstall } from "../lib/types";
@@ -131,6 +132,8 @@ export default function Home() {
           Skip videos (smaller, faster downloads)
         </label>
       </section>
+
+      <LinkSettings />
 
       <p className="foot">
         Closing this window keeps QuickDirect running in the tray. It isn't affiliated with or endorsed by ppy.

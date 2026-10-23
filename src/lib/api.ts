@@ -4,6 +4,7 @@ import type {
   Beatmapset,
   HotkeyStatus,
   ImportMethod,
+  LinkHandlerStatus,
   OsuInstall,
   SearchQuery,
   SearchResponse,
@@ -43,3 +44,19 @@ export const setHotkey = (hotkey: string) => invoke<HotkeyStatus>("set_hotkey", 
 
 export const openBeatmapsetPage = (setId: number) =>
   invoke<void>("open_beatmapset_page", { setId });
+
+export const getLinkHandlerStatus = () => invoke<LinkHandlerStatus>("get_link_handler_status");
+
+/** Registers QuickDirect as a selectable browser (or switches handling off). */
+export const setLinkHandler = (enabled: boolean) =>
+  invoke<LinkHandlerStatus>("set_link_handler", { enabled });
+
+/** Rejects while QuickDirect is still the default browser. */
+export const removeLinkRegistration = () => invoke<LinkHandlerStatus>("remove_link_registration");
+
+export const openDefaultApps = () => invoke<void>("open_default_apps");
+
+/** The toast's buttons: open the clicked link in the user's browser, retry it, or hide the toast. */
+export const toastOpenPage = (url: string) => invoke<void>("toast_open_page", { url });
+export const toastRetry = (url: string) => invoke<void>("toast_retry", { url });
+export const dismissToast = () => invoke<void>("dismiss_toast");

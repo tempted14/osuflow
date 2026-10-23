@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Home from "./windows/Home";
 import Overlay from "./windows/Overlay";
+import Toast from "./windows/Toast";
 import "./styles.css";
 
 // One bundle serves both windows; the window's label (set in tauri.conf.json) picks the screen.
@@ -16,7 +17,8 @@ function windowLabel(): string {
 
 const label = windowLabel();
 document.documentElement.dataset.window = label;
-const Root = label === "overlay" ? Overlay : Home;
+const SCREENS: Record<string, React.ComponentType> = { overlay: Overlay, toast: Toast };
+const Root = SCREENS[label] ?? Home;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

@@ -201,6 +201,19 @@ Start-Sleep -Milliseconds 2500
     assert!(saw_dialog, "a real modal dialog was not detected");
 }
 
+#[cfg(windows)]
+#[test]
+#[ignore = "asks Windows which browser opens links; changes nothing"]
+fn live_shell_reports_this_pcs_default_browser() {
+    let browser = crate::browser::shell_default_browser().expect("Windows reported no browser for https links");
+    println!("default browser: {}", browser.display());
+    assert!(browser.is_file(), "{} doesn't exist", browser.display());
+    let me = std::env::current_exe().unwrap();
+    let registry = crate::browser::Registry::system();
+    assert!(!registry.is_default(&me), "this test binary shouldn't be the default browser");
+    assert_eq!(registry.default_browser(&me), Some(browser));
+}
+
 #[test]
 #[ignore = "inspects this machine"]
 fn live_detects_this_machines_osu() {

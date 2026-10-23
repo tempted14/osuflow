@@ -18,6 +18,11 @@ pub struct Settings {
     pub hotkey: String,
     /// Leave results out of the overlay when they are already in the Songs folder.
     pub hide_installed: bool,
+    /// Download beatmap links that Windows passes to QuickDirect (when it is the default
+    /// browser) instead of opening them. Off by default.
+    pub link_handler: bool,
+    /// The browser the link handler replaced, so every other link can still be opened in it.
+    pub previous_browser: Option<PathBuf>,
 }
 
 impl Default for Settings {
@@ -29,6 +34,8 @@ impl Default for Settings {
             mirror_order: MirrorId::DEFAULT_ORDER.to_vec(),
             hotkey: DEFAULT_HOTKEY.to_string(),
             hide_installed: false,
+            link_handler: false,
+            previous_browser: None,
         }
     }
 }
@@ -68,6 +75,7 @@ impl Settings {
             "" => DEFAULT_HOTKEY.to_string(),
             trimmed => trimmed.to_string(),
         };
+        self.previous_browser = self.previous_browser.filter(|p| !p.as_os_str().is_empty());
         self
     }
 }
@@ -107,6 +115,37 @@ mod tests {
         assert!(!s.no_video);
         assert_eq!(s.mirror_order, vec![MirrorId::Catboy, MirrorId::OsuDirect]);
         assert_eq!(s.hotkey, DEFAULT_HOTKEY);
+    }
+
+    #[test]
+    fn the_link_handler_is_off_by_default_and_remembers_no_browser() {
+        let s = Settings::default();
+        assert!(!s.link_handler);
+        assert_eq!(s.previous_browser, None);
+    }
+
+    #[test]
+    fn an_empty_remembered_browser_is_dropped() {
+        let s = Settings { previous_browser: Some(PathBuf::new()), ..Settings::default() }.normalized();
+        assert_eq!(s.previous_browser, None);
+    }
+
+    #[test]
+    fn link_settings_round_trip_and_older_files_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let s = Settings {
+            link_handler: true,
+            previous_browser: Some(PathBuf::from(r"C:\Browsers\chrome.exe")),
+            ..Settings::default()
+        };
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+
+        std::fs::write(&path, r#"{"noVideo": false, "hotkey": "Alt+O"}"#).unwrap();
+        let older = Settings::load(&path);
+        assert!(!older.link_handler);
+        assert_eq!(older.hotkey, "Alt+O");
     }
 
     #[test]

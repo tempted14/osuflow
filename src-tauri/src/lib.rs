@@ -1,3 +1,4 @@
+mod browser;
 mod commands;
 mod downloader;
 mod error;
@@ -5,6 +6,8 @@ mod handoff;
 mod hotkey;
 mod importer;
 mod library;
+mod link_url;
+mod links;
 #[cfg(test)]
 mod live_tests;
 mod mirrors;
@@ -23,12 +26,23 @@ use tauri::{Emitter, Manager, WindowEvent};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, so a second launch (Windows opening a link with QuickDirect already running) is
+        // caught and handed to the running app before anything else starts.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            match link_url::first_link_in_args(argv.into_iter().skip(1)) {
+                Some(url) => links::handle_url(app, url),
+                None => tray::show_settings_window(app),
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let settings_path = app.path().app_config_dir()?.join("settings.json");
             let settings = settings::Settings::load(&settings_path);
             let hotkey = settings.hotkey.clone();
+            let link_handler = settings.link_handler;
+            // Set when Windows started QuickDirect to open a link.
+            let startup_link = link_url::first_link_in_args(std::env::args().skip(1));
 
             let downloads_dir = app.path().app_local_data_dir()?.join("downloads");
             downloader::cleanup_old(&downloads_dir, Duration::from_secs(24 * 3600));
@@ -57,8 +71,23 @@ pub fn run() {
             // Windows are declared with `create: false` in tauri.conf.json and built here, after
             // the state exists. Otherwise a page that loads instantly (the packaged app) can call
             // a command before `manage` has run and get "state not managed" back.
+            // Started by a link with nothing for QuickDirect to do with it (not a beatmap link,
+            // or the handler is off): pass it on and leave without opening any window, so
+            // ordinary links stay as quick as they were.
+            if let Some(url) = &startup_link
+                && (!link_handler || link_url::parse_link(url).is_none())
+            {
+                let _ = links::forward_url(app.handle(), url);
+                std::process::exit(0);
+            }
+
             for config in &app.config().app.windows {
-                tauri::WebviewWindowBuilder::from_config(app.handle(), config)?.build()?;
+                let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), config)?;
+                // A beatmap link started us: stay in the background and let only the toast show.
+                if config.label == "main" && startup_link.is_some() {
+                    builder = builder.visible(false);
+                }
+                builder.build()?;
             }
 
             // A hotkey another program already owns must not stop the app: the settings window
@@ -68,6 +97,9 @@ pub fn run() {
                 hotkey::HotkeyStatus::from_result(&hotkey, &registered);
 
             tray::build(app.handle(), &hotkey)?;
+            if let Some(url) = startup_link {
+                links::handle_url(app.handle(), url);
+            }
             Ok(())
         })
         .on_window_event(|window, event| match (window.label(), event) {
@@ -101,6 +133,13 @@ pub fn run() {
             commands::get_hotkey_status,
             commands::set_hotkey,
             commands::open_beatmapset_page,
+            links::get_link_handler_status,
+            links::set_link_handler,
+            links::remove_link_registration,
+            links::open_default_apps,
+            links::toast_open_page,
+            links::toast_retry,
+            links::dismiss_toast,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

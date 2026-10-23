@@ -103,6 +103,8 @@ export interface Settings {
   mirrorOrder: Mirror[];
   hotkey: string;
   hideInstalled: boolean;
+  linkHandler: boolean;
+  previousBrowser: string | null;
 }
 
 export interface HotkeyStatus {
@@ -146,6 +148,28 @@ export interface DownloadProgressEvent {
 }
 
 export type ImportMethod = "launchedOsu" | "movedToSongs";
+
+export type ToastState = "resolving" | "installed" | "working" | "done" | "failed" | "hidden";
+
+/** Payload of the `link-toast` event: what the corner toast shows for a clicked beatmap link. */
+export interface LinkToast {
+  state: ToastState;
+  setId: number | null;
+  label: string;
+  message: string | null;
+  /** The link that was clicked, for "Open page" and "Try again". */
+  url: string;
+}
+
+export interface LinkHandlerStatus {
+  /** The user's switch. */
+  enabled: boolean;
+  /** QuickDirect is listed as a browser in Windows' Default apps. */
+  registered: boolean;
+  /** The user has chosen QuickDirect there - the one step Windows won't let an app do. */
+  isDefault: boolean;
+  previousBrowser: string | null;
+}
 
 /** One download as the overlay tracks it, built from the `download-*` events. */
 export interface DownloadJob {

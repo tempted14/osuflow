@@ -34,6 +34,22 @@
         "resizable": false,
         "shadow": false,
         "focus": false
+      },
+      {
+        "label": "toast",
+        "create": false,
+        "title": "QuickDirect link",
+        "width": 380,
+        "height": 124,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "focusable": false
       }
     ],
     "security": {

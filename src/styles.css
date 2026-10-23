@@ -543,3 +543,88 @@ kbd {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+.ok-text {
+  color: var(--good);
+}
+
+.steps {
+  margin: 8px 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+}
+
+.steps li.ok {
+  color: var(--good);
+}
+
+.steps li.ok::marker {
+  content: "✓  ";
+}
+
+/* ---------- link toast ---------- */
+
+/* The toast window is transparent and undecorated; only the card is drawn. */
+html[data-window="toast"],
+html[data-window="toast"] body {
+  background: transparent;
+  overflow: hidden;
+}
+
+.toast {
+  height: calc(100% - 12px);
+  margin: 6px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 2px;
+  background: rgba(36, 35, 44, 0.98);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.toast.done,
+.toast.installed {
+  border-left-color: var(--good);
+}
+
+.toast.failed {
+  border-left-color: var(--bad);
+}
+
+.toast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toast-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-line {
+  color: var(--muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.toast.failed .toast-line {
+  color: var(--bad);
+}
+
+.toast-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.toast-actions button {
+  padding: 3px 10px;
+  font-size: 0.85rem;
+}
