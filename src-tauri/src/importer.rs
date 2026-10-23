@@ -1,7 +1,9 @@
-//! Hands a downloaded .osz to osu! stable. Launching `osu!.exe "<file>.osz"` is exactly what
-//! double-clicking an .osz does, so nothing is injected or patched. If that fails, or osu!
-//! can't be found, the file is dropped into the Songs folder instead and osu! picks it up on
-//! its next refresh.
+//! Hands a downloaded .osz to osu! stable. The file is opened the way Explorer opens it on a
+//! double-click or "Open with" (through Windows' .osz association, which runs `osu!.exe "<file>"`
+//! or passes the file to the osu! that is already running), so nothing is injected or patched.
+//! If the association doesn't lead to this osu!, `osu!.exe` is started with the file directly.
+//! If that fails, or osu! can't be found, the file is dropped into the Songs folder instead and
+//! osu! picks it up on its next refresh.
 
 use crate::{
     error::{AppError, Result},
@@ -35,8 +37,25 @@ pub fn place_in_songs(
     }
 }
 
-/// Starts `osu!.exe` with the archive, which is what double-clicking an .osz does.
+/// Opens the archive with osu! the way Explorer does for a double-click or "Open with": through
+/// Windows' own .osz file association, whenever that leads to this osu!. Otherwise (another
+/// program owns .osz, or the shell refuses) `osu!.exe` is started with the file directly.
 pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
+    // The shell picks the program from the file's own extension, so ask about that one.
+    let extension = osz.extension().map(|extension| format!(".{}", extension.to_string_lossy()));
+    let associated = extension.as_deref().and_then(shell::associated_exe);
+    if association_leads_to(associated.as_deref(), &install.exe) && shell::open(osz).is_ok() {
+        return Ok(());
+    }
+    launch_exe(install, osz)
+}
+
+/// Whether the program Windows opens .osz files with is this osu! (and not lazer, say).
+fn association_leads_to(associated: Option<&Path>, osu_exe: &Path) -> bool {
+    associated.is_some_and(|program| crate::browser::same_exe(program, osu_exe))
+}
+
+fn launch_exe(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
     // osu! expects to start in its own folder. The child is deliberately not waited on.
     Command::new(&install.exe)
         .arg(osz)
@@ -46,6 +65,83 @@ pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
         .stderr(Stdio::null())
         .spawn()
         .map(drop)
+}
+
+#[cfg(windows)]
+mod shell {
+    use std::{
+        ffi::OsStr,
+        io,
+        os::windows::ffi::OsStrExt,
+        path::{Path, PathBuf},
+    };
+    use windows::{
+        Win32::UI::{
+            Shell::{ASSOCF_NONE, ASSOCSTR_EXECUTABLE, AssocQueryStringW, ShellExecuteW},
+            WindowsAndMessaging::SW_SHOWNORMAL,
+        },
+        core::{PCWSTR, PWSTR, w},
+    };
+
+    fn wide(text: &OsStr) -> Vec<u16> {
+        text.encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    /// The program Windows opens files with this extension (".osz") with, if there is one.
+    pub fn associated_exe(extension: &str) -> Option<PathBuf> {
+        let extension = wide(OsStr::new(extension));
+        let mut buffer = [0u16; 1024];
+        let mut length = buffer.len() as u32;
+        // SAFETY: `extension` is NUL-terminated, `buffer` outlives the call and `length` is its
+        // size in UTF-16 units.
+        let result = unsafe {
+            AssocQueryStringW(
+                ASSOCF_NONE,
+                ASSOCSTR_EXECUTABLE,
+                PCWSTR(extension.as_ptr()),
+                w!("open"),
+                Some(PWSTR(buffer.as_mut_ptr())),
+                &mut length,
+            )
+        };
+        if result.is_err() {
+            return None;
+        }
+        let text = String::from_utf16_lossy(&buffer[..(length as usize).min(buffer.len())]);
+        let text = text.trim_end_matches('\0');
+        (!text.is_empty()).then(|| PathBuf::from(text))
+    }
+
+    /// Opens `file` with its associated program, as Explorer does on a double-click: same verb,
+    /// and the file's own folder as the working directory.
+    pub fn open(file: &Path) -> io::Result<()> {
+        let file_name = wide(file.as_os_str());
+        let folder = file.parent().map(|parent| wide(parent.as_os_str()));
+        let folder = folder.as_ref().map_or(PCWSTR::null(), |folder| PCWSTR(folder.as_ptr()));
+        // SAFETY: both strings are NUL-terminated and outlive the call.
+        let result = unsafe {
+            ShellExecuteW(None, w!("open"), PCWSTR(file_name.as_ptr()), PCWSTR::null(), folder, SW_SHOWNORMAL)
+        };
+        // Values above 32 mean the shell started the program; anything else is an error code.
+        let code = result.0 as isize;
+        if code > 32 { Ok(()) } else { Err(io::Error::other(format!("the shell could not open the file (code {code})"))) }
+    }
+}
+
+#[cfg(not(windows))]
+mod shell {
+    use std::{
+        io,
+        path::{Path, PathBuf},
+    };
+
+    pub fn associated_exe(_extension: &str) -> Option<PathBuf> {
+        None
+    }
+
+    pub fn open(_file: &Path) -> io::Result<()> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
 }
 
 fn move_to_songs(osz: &Path, songs: &Path) -> Result<()> {
@@ -124,5 +220,133 @@ mod tests {
         };
         let error = launch_osu(&install, &osz).unwrap_err();
         assert!(matches!(place_in_songs(&osz, None, Some(error)), Err(AppError::Io(_))));
+    }
+
+    #[test]
+    fn only_an_association_that_leads_to_this_osu_counts() {
+        let exe = Path::new(r"C:\osu!\osu!.exe");
+        assert!(association_leads_to(Some(Path::new(r"c:\OSU!\osu!.EXE")), exe));
+        assert!(!association_leads_to(Some(Path::new(r"C:\osu-lazer\osu!.exe")), exe));
+        assert!(!association_leads_to(None, exe));
+    }
+
+    /// A throwaway file type, registered for the current user only and removed again on drop,
+    /// whose "open" command is a script. It lets the real shell route run without any real program.
+    #[cfg(windows)]
+    struct TestAssociation {
+        extension: String,
+        prog_id: String,
+    }
+
+    #[cfg(windows)]
+    impl TestAssociation {
+        fn register(script: &Path) -> Self {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            use winreg::{RegKey, enums::HKEY_CURRENT_USER};
+            static NEXT: AtomicU32 = AtomicU32::new(0);
+            let id = format!("{}x{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
+            let (extension, prog_id) = (format!(".qdtest{id}"), format!("QuickDirectTest{id}"));
+            let user = RegKey::predef(HKEY_CURRENT_USER);
+            let (ext_key, _) = user.create_subkey(format!(r"Software\Classes\{extension}")).unwrap();
+            ext_key.set_value("", &prog_id).unwrap();
+            let (command, _) = user.create_subkey(format!(r"Software\Classes\{prog_id}\shell\open\command")).unwrap();
+            command.set_value("", &format!(r#""{}" "%1""#, script.display())).unwrap();
+            Self { extension, prog_id }
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for TestAssociation {
+        fn drop(&mut self) {
+            use winreg::{RegKey, enums::HKEY_CURRENT_USER};
+            let user = RegKey::predef(HKEY_CURRENT_USER);
+            let _ = user.delete_subkey_all(format!(r"Software\Classes\{}", self.extension));
+            let _ = user.delete_subkey_all(format!(r"Software\Classes\{}", self.prog_id));
+        }
+    }
+
+    /// A stand-in program that appends the file it was given and its working directory to `log`.
+    #[cfg(windows)]
+    fn recorder(dir: &Path, name: &str, log: &str) -> PathBuf {
+        let script = dir.join(name);
+        let body = format!("@echo off\r\n>>\"%~dp0{log}\" echo \"%~1\"\r\n>>\"%~dp0{log}\" echo \"%CD%\"\r\n");
+        std::fs::write(&script, body).unwrap();
+        script
+    }
+
+    #[cfg(windows)]
+    fn recorded(log: &Path) -> Vec<String> {
+        let started = std::time::Instant::now();
+        loop {
+            let lines: Vec<String> = std::fs::read_to_string(log)
+                .unwrap_or_default()
+                .lines()
+                .map(|line| line.trim().trim_matches('"').to_string())
+                .filter(|line| !line.is_empty())
+                .collect();
+            if lines.len() >= 2 {
+                return lines;
+            }
+            assert!(started.elapsed() < std::time::Duration::from_secs(15), "the program never ran");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+
+    #[cfg(windows)]
+    fn install_at(exe: &Path, dir: &Path, songs: &Path) -> OsuInstall {
+        OsuInstall {
+            exe: exe.to_path_buf(),
+            dir: dir.to_path_buf(),
+            songs_dir: songs.to_path_buf(),
+            exclusive_fullscreen: false,
+            source: DetectSource::Settings,
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_file_type_that_opens_this_osu_is_opened_through_the_shell() {
+        use crate::browser::same_exe;
+        let work = tempfile::tempdir().unwrap();
+        let osu_dir = tempfile::tempdir().unwrap();
+        let songs = tempfile::tempdir().unwrap();
+        let osu = recorder(osu_dir.path(), "osu-stand-in.cmd", "calls.txt");
+        let association = TestAssociation::register(&osu);
+        let archive = work.path().join(format!("123 Artist & Title (Cut Ver.){}", association.extension));
+        std::fs::write(&archive, b"PK").unwrap();
+
+        // Checked first, so a registry hiccup fails here instead of showing Windows' "which app?" box.
+        let associated = shell::associated_exe(&association.extension).expect("the shell can't see the test association");
+        assert!(same_exe(&associated, &osu), "associated with {associated:?}");
+
+        // osu!'s folder is claimed to be somewhere else, so a direct start would run there.
+        let claimed = tempfile::tempdir().unwrap();
+        launch_osu(&install_at(&osu, claimed.path(), songs.path()), &archive).unwrap();
+        let seen = recorded(&osu_dir.path().join("calls.txt"));
+        assert!(same_exe(Path::new(&seen[0]), &archive), "got {seen:?}");
+        // Explorer runs the program in the file's own folder; a direct start would have used osu!'s.
+        assert!(same_exe(Path::new(&seen[1]), work.path()), "started directly, in {:?}", seen[1]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_file_type_that_opens_something_else_starts_osu_directly() {
+        use crate::browser::same_exe;
+        let work = tempfile::tempdir().unwrap();
+        let osu_dir = tempfile::tempdir().unwrap();
+        let other_dir = tempfile::tempdir().unwrap();
+        let songs = tempfile::tempdir().unwrap();
+        let osu = recorder(osu_dir.path(), "osu-stand-in.cmd", "calls.txt");
+        let other = recorder(other_dir.path(), "other-program.cmd", "never.txt");
+        let association = TestAssociation::register(&other);
+        let archive = work.path().join(format!("123 Artist - Title{}", association.extension));
+        std::fs::write(&archive, b"PK").unwrap();
+        assert!(shell::associated_exe(&association.extension).is_some(), "the shell can't see the test association");
+
+        launch_osu(&install_at(&osu, osu_dir.path(), songs.path()), &archive).unwrap();
+        let seen = recorded(&osu_dir.path().join("calls.txt"));
+        assert!(same_exe(Path::new(&seen[0]), &archive), "got {seen:?}");
+        assert!(same_exe(Path::new(&seen[1]), osu_dir.path()), "worked in {:?}", seen[1]);
+        assert!(!other_dir.path().join("never.txt").exists(), "the other program must not be run");
     }
 }
