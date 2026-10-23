@@ -63,13 +63,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "osu!flow",
+    "category": "Utility",
+    "shortDescription": "Search and download osu! beatmaps without leaving the game",
+    "longDescription": "osu!flow sits in the system tray. Press a shortcut in osu! to search for maps, click one, and it is in song select a moment later.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false,
+        "installerHooks": "installer-hooks.nsh"
+      }
+    }
   }
 }
