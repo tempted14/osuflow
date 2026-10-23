@@ -62,7 +62,8 @@ pub fn looks_like_stable(exe: &Path) -> bool {
         .any(|name| dir.join(name).exists())
 }
 
-fn running_osu_exe() -> Option<PathBuf> {
+/// Process id and executable of every running osu! stable (lazer is skipped).
+pub fn running_osu_processes() -> Vec<(u32, PathBuf)> {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
     let mut system = System::new();
     system.refresh_processes_specifics(
@@ -72,8 +73,13 @@ fn running_osu_exe() -> Option<PathBuf> {
     );
     system
         .processes_by_exact_name(OsStr::new("osu!.exe"))
-        .filter_map(|process| process.exe().map(Path::to_path_buf))
-        .find(|exe| looks_like_stable(exe))
+        .filter_map(|process| Some((process.pid().as_u32(), process.exe()?.to_path_buf())))
+        .filter(|(_, exe)| looks_like_stable(exe))
+        .collect()
+}
+
+fn running_osu_exe() -> Option<PathBuf> {
+    running_osu_processes().into_iter().next().map(|(_, exe)| exe)
 }
 
 #[cfg(windows)]

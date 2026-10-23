@@ -12,13 +12,32 @@
   "app": {
     "windows": [
       {
-        "title": "QuickDirect (debug)",
-        "width": 900,
-        "height": 760
+        "label": "main",
+        "create": false,
+        "title": "QuickDirect",
+        "width": 560,
+        "height": 720,
+        "minWidth": 480,
+        "minHeight": 520
+      },
+      {
+        "label": "overlay",
+        "create": false,
+        "title": "QuickDirect overlay",
+        "width": 1280,
+        "height": 720,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data: https://assets.ppy.sh; media-src https://b.ppy.sh; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {

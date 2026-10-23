@@ -1,4 +1,4 @@
-use crate::mirrors::MirrorId;
+use crate::{hotkey::DEFAULT_HOTKEY, mirrors::MirrorId};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -14,6 +14,10 @@ pub struct Settings {
     pub no_video: bool,
     /// Preferred mirror order; always contains every known mirror once after `normalized`.
     pub mirror_order: Vec<MirrorId>,
+    /// Global shortcut that opens the overlay, e.g. `Ctrl+Shift+D`.
+    pub hotkey: String,
+    /// Leave results out of the overlay when they are already in the Songs folder.
+    pub hide_installed: bool,
 }
 
 impl Default for Settings {
@@ -23,6 +27,8 @@ impl Default for Settings {
             songs_dir: None,
             no_video: true,
             mirror_order: MirrorId::DEFAULT_ORDER.to_vec(),
+            hotkey: DEFAULT_HOTKEY.to_string(),
+            hide_installed: false,
         }
     }
 }
@@ -58,6 +64,10 @@ impl Settings {
         self.mirror_order = order;
         self.osu_exe_path = self.osu_exe_path.filter(|p| !p.as_os_str().is_empty());
         self.songs_dir = self.songs_dir.filter(|p| !p.as_os_str().is_empty());
+        self.hotkey = match self.hotkey.trim() {
+            "" => DEFAULT_HOTKEY.to_string(),
+            trimmed => trimmed.to_string(),
+        };
         self
     }
 }
@@ -71,6 +81,32 @@ mod tests {
         let s = Settings::default();
         assert!(s.no_video);
         assert_eq!(s.mirror_order, vec![MirrorId::OsuDirect, MirrorId::Catboy]);
+    }
+
+    #[test]
+    fn overlay_defaults_are_ctrl_shift_d_and_show_installed_maps() {
+        let s = Settings::default();
+        assert_eq!(s.hotkey, "Ctrl+Shift+D");
+        assert!(!s.hide_installed);
+    }
+
+    #[test]
+    fn a_blank_hotkey_falls_back_to_the_default_and_others_are_trimmed() {
+        let blank = Settings { hotkey: "   ".into(), ..Settings::default() }.normalized();
+        assert_eq!(blank.hotkey, DEFAULT_HOTKEY);
+        let padded = Settings { hotkey: " Alt+O ".into(), ..Settings::default() }.normalized();
+        assert_eq!(padded.hotkey, "Alt+O");
+    }
+
+    #[test]
+    fn settings_saved_before_phase_two_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, r#"{"osuExePath":null,"songsDir":null,"noVideo":false,"mirrorOrder":["catboy","osuDirect"]}"#).unwrap();
+        let s = Settings::load(&path);
+        assert!(!s.no_video);
+        assert_eq!(s.mirror_order, vec![MirrorId::Catboy, MirrorId::OsuDirect]);
+        assert_eq!(s.hotkey, DEFAULT_HOTKEY);
     }
 
     #[test]

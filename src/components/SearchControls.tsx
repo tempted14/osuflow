@@ -1,0 +1,114 @@
+import type { RefObject } from "react";
+import type { SearchParams } from "../hooks/useSearch";
+import type { Settings, Sort } from "../lib/types";
+
+const MODES: [string, number | null][] = [
+  ["All", null],
+  ["osu!", 0],
+  ["taiko", 1],
+  ["catch", 2],
+  ["mania", 3],
+];
+
+const STATUSES: [string, number][] = [
+  ["Ranked", 1],
+  ["Loved", 4],
+  ["Qualified", 3],
+  ["Pending", 0],
+  ["Graveyard", -2],
+];
+
+const SORTS: [string, Sort][] = [
+  ["Best match", "relevance"],
+  ["Newest ranked", "rankedDate"],
+  ["Most played", "plays"],
+  ["Most favourited", "favourites"],
+  ["Recently updated", "updated"],
+  ["Hardest", "difficulty"],
+  ["Title A–Z", "title"],
+  ["Artist A–Z", "artist"],
+];
+
+export function SearchControls(props: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  params: SearchParams;
+  settings: Settings | null;
+  onChange: (patch: Partial<SearchParams>) => void;
+  onSettings: (patch: Partial<Settings>) => void;
+  onClose: () => void;
+}) {
+  const { params, settings } = props;
+  return (
+    <header className="controls">
+      <div className="row">
+        <input
+          ref={props.inputRef}
+          className="search"
+          type="search"
+          placeholder="Search artist, title, mapper or tags…"
+          value={params.text}
+          onChange={(e) => props.onChange({ text: e.currentTarget.value })}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <button className="close" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
+          ✕
+        </button>
+      </div>
+      <div className="row filters">
+        <div className="tabs" role="group" aria-label="Game mode">
+          {MODES.map(([label, mode]) => (
+            <button
+              key={label}
+              className={params.mode === mode ? "on" : ""}
+              aria-pressed={params.mode === mode}
+              onClick={() => props.onChange({ mode })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <select
+          aria-label="Status"
+          value={params.status}
+          onChange={(e) => props.onChange({ status: Number(e.currentTarget.value) })}
+        >
+          {STATUSES.map(([label, value]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Sort by"
+          value={params.sort}
+          onChange={(e) => props.onChange({ sort: e.currentTarget.value as Sort })}
+        >
+          {SORTS.map(([label, value]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings?.hideInstalled ?? false}
+            disabled={!settings}
+            onChange={(e) => props.onSettings({ hideInstalled: e.currentTarget.checked })}
+          />
+          Hide installed
+        </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings?.noVideo ?? true}
+            disabled={!settings}
+            onChange={(e) => props.onSettings({ noVideo: e.currentTarget.checked })}
+          />
+          No video
+        </label>
+      </div>
+    </header>
+  );
+}

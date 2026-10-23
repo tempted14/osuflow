@@ -22,21 +22,21 @@ pub enum ImportMethod {
     MovedToSongs,
 }
 
-pub fn import(osz: &Path, install: Option<&OsuInstall>, songs_fallback: Option<&Path>) -> Result<ImportMethod> {
-    let launch_error = match install {
-        Some(install) => match launch_osu(install, osz) {
-            Ok(()) => return Ok(ImportMethod::LaunchedOsu),
-            Err(error) => Some(error),
-        },
-        None => None,
-    };
-    match songs_fallback.filter(|dir| dir.is_dir()) {
+/// Drops the archive into the Songs folder, for when osu! can't be launched or found.
+/// `launch_error` is what went wrong launching it, reported if there is nowhere to put the file.
+pub fn place_in_songs(
+    osz: &Path,
+    songs: Option<&Path>,
+    launch_error: Option<std::io::Error>,
+) -> Result<ImportMethod> {
+    match songs.filter(|dir| dir.is_dir()) {
         Some(songs) => move_to_songs(osz, songs).map(|()| ImportMethod::MovedToSongs),
         None => Err(launch_error.map_or(AppError::OsuNotFound, AppError::Io)),
     }
 }
 
-fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
+/// Starts `osu!.exe` with the archive, which is what double-clicking an .osz does.
+pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
     // osu! expects to start in its own folder. The child is deliberately not waited on.
     Command::new(&install.exe)
         .arg(osz)
@@ -78,7 +78,7 @@ mod tests {
         let downloads = tempfile::tempdir().unwrap();
         let songs = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
-        let method = import(&osz, None, Some(songs.path())).unwrap();
+        let method = place_in_songs(&osz, Some(songs.path()), None).unwrap();
         assert_eq!(method, ImportMethod::MovedToSongs);
         assert!(songs.path().join("123 Artist - Title.osz").is_file());
         assert!(!osz.exists());
@@ -88,9 +88,9 @@ mod tests {
     fn nowhere_to_put_it_is_osu_not_found() {
         let downloads = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
-        assert!(matches!(import(&osz, None, None), Err(AppError::OsuNotFound)));
+        assert!(matches!(place_in_songs(&osz, None, None), Err(AppError::OsuNotFound)));
         let missing = downloads.path().join("no-such-songs-dir");
-        assert!(matches!(import(&osz, None, Some(&missing)), Err(AppError::OsuNotFound)));
+        assert!(matches!(place_in_songs(&osz, Some(&missing), None), Err(AppError::OsuNotFound)));
         assert!(osz.exists(), "the download is kept when nothing could take it");
     }
 
@@ -106,7 +106,8 @@ mod tests {
             exclusive_fullscreen: false,
             source: DetectSource::Settings,
         };
-        let method = import(&osz, Some(&install), Some(songs.path())).unwrap();
+        let error = launch_osu(&install, &osz).unwrap_err();
+        let method = place_in_songs(&osz, Some(songs.path()), Some(error)).unwrap();
         assert_eq!(method, ImportMethod::MovedToSongs);
     }
 
@@ -121,6 +122,7 @@ mod tests {
             exclusive_fullscreen: false,
             source: DetectSource::Settings,
         };
-        assert!(matches!(import(&osz, Some(&install), None), Err(AppError::Io(_))));
+        let error = launch_osu(&install, &osz).unwrap_err();
+        assert!(matches!(place_in_songs(&osz, None, Some(error)), Err(AppError::Io(_))));
     }
 }

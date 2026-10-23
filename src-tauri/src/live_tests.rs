@@ -124,6 +124,84 @@ async fn live_download_works_on_every_mirror() {
 }
 
 #[test]
+#[ignore = "needs osu! stable running on this machine"]
+fn live_finds_the_running_osu_window() {
+    let osu = crate::overlay::locate_osu_window();
+    println!("osu! running: {}", osu.running);
+    assert!(osu.running, "start osu! stable first");
+    let window = osu.window.expect("osu! is running but no usable window was found");
+    println!("window: {:?}", window);
+    assert!(window.rect.width() > 100 && window.rect.height() > 100, "implausible size {:?}", window.rect);
+    assert!(window.visible && !window.minimized && !window.owned);
+}
+
+#[test]
+#[ignore = "reads osu!'s window state; sends it nothing"]
+fn live_reads_osu_window_state_without_touching_it() {
+    let snapshot = crate::overlay::snapshot_osu();
+    println!("osu! processes: {:?}", snapshot.pids);
+    for window in snapshot.windows.iter().filter(|w| w.visible) {
+        println!("visible window: {window:?}");
+    }
+    let status = crate::handoff::assess(&snapshot);
+    println!("status: {status:?}");
+    assert!(
+        !matches!(status, crate::handoff::OsuStatus::Blocked(_)),
+        "osu! looks blocked ({status:?}): close any dialog and make sure only one osu! is running"
+    );
+}
+
+/// Opens a real modal message box (owned by a form placed far off-screen, in a throwaway
+/// PowerShell) and checks that the detection used before handing anything to osu! recognises
+/// it. osu! itself is never involved.
+#[test]
+#[ignore = "opens a real, off-screen modal dialog in a throwaway PowerShell"]
+fn live_a_real_modal_dialog_is_detected() {
+    use crate::handoff::{Blocked, OsuStatus, assess};
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object Windows.Forms.Form
+$f.Text = 'qd-owner'
+$f.StartPosition = 'Manual'
+$f.Location = New-Object Drawing.Point(-4000, -4000)
+$f.Show()
+Start-Sleep -Milliseconds 2500
+[void][Windows.Forms.MessageBox]::Show($f, 'QuickDirect detection test - safe to ignore')
+"#;
+    let mut child = Command::new("powershell.exe")
+        .args(["-NoProfile", "-Sta", "-Command", script])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("start powershell");
+    let pid = child.id();
+
+    let started = Instant::now();
+    let (mut saw_plain_window_ready, mut saw_dialog) = (false, false);
+    while started.elapsed() < Duration::from_secs(25) && !saw_dialog {
+        let snapshot = crate::overlay::snapshot_for_pids(vec![pid]);
+        match assess(&snapshot) {
+            OsuStatus::Ready => saw_plain_window_ready = true,
+            OsuStatus::Blocked(Blocked::DialogOpen) => {
+                println!("detected: {:#?}", snapshot.windows.iter().filter(|w| w.visible).collect::<Vec<_>>());
+                saw_dialog = true;
+            }
+            _ => {}
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(saw_plain_window_ready, "the plain form was never seen as Ready");
+    assert!(saw_dialog, "a real modal dialog was not detected");
+}
+
+#[test]
 #[ignore = "inspects this machine"]
 fn live_detects_this_machines_osu() {
     let install = osu_locator::detect(&Settings::default()).expect("osu! stable was not found");

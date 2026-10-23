@@ -3,15 +3,20 @@
 use crate::{
     downloader::{DownloadState, Downloader, EventSink, ProgressEvent, StateEvent},
     error::{AppError, Result},
-    importer::{self, ImportMethod},
+    handoff::Handoff,
+    hotkey::{self, HotkeyStatus},
+    importer::ImportMethod,
+    library::Library,
     mirrors::{MirrorSet, SearchQuery, SearchResponse},
     models::Beatmapset,
     osu_locator::{self, OsuInstall},
+    overlay::{self, OverlayState},
     settings::Settings,
+    tray,
 };
 use std::{
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -20,6 +25,10 @@ pub struct AppState {
     pub settings_path: PathBuf,
     pub mirrors: Arc<MirrorSet>,
     pub downloader: Arc<Downloader>,
+    pub handoff: Handoff,
+    pub library: Arc<Library>,
+    pub overlay: OverlayState,
+    pub hotkey_status: Mutex<HotkeyStatus>,
 }
 
 impl AppState {
@@ -48,7 +57,8 @@ pub async fn search(state: State<'_, AppState>, query: SearchQuery) -> Result<Se
 }
 
 /// Downloads a beatmapset and hands it to osu!. Progress arrives as events; the returned value
-/// says how it was handed over.
+/// says how it was handed over. Success means the set's folder really appeared in Songs; if
+/// osu! is busy or never imports it, the error says so and the download is kept.
 #[tauri::command]
 pub async fn download_beatmapset(state: State<'_, AppState>, set_id: u32) -> Result<ImportMethod> {
     let settings = state.settings_snapshot();
@@ -57,7 +67,7 @@ pub async fn download_beatmapset(state: State<'_, AppState>, set_id: u32) -> Res
         .fetch(set_id, settings.no_video, &settings.mirror_order)
         .await?;
     state.downloader.emit_state(set_id, DownloadState::Importing, None);
-    match import_blocking(settings, archive).await {
+    match state.handoff.hand_off(&archive, set_id, &settings).await {
         Ok(method) => {
             state.downloader.emit_state(set_id, DownloadState::Done, None);
             Ok(method)
@@ -69,20 +79,6 @@ pub async fn download_beatmapset(state: State<'_, AppState>, set_id: u32) -> Res
             Err(error)
         }
     }
-}
-
-/// Detecting osu! scans the process list, so it runs off the async runtime.
-async fn import_blocking(settings: Settings, archive: PathBuf) -> Result<ImportMethod> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let install = osu_locator::detect(&settings);
-        let songs = install
-            .as_ref()
-            .map(|i| i.songs_dir.clone())
-            .or_else(|| settings.songs_dir.clone());
-        importer::import(&archive, install.as_ref(), songs.as_deref())
-    })
-    .await
-    .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 #[tauri::command]
@@ -116,10 +112,95 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
     state.settings_snapshot()
 }
 
+/// Saves everything except the hotkey, which only `set_hotkey` may change because it also has
+/// to re-register the shortcut with Windows.
 #[tauri::command]
-pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Result<Settings> {
-    let settings = settings.normalized();
+pub fn set_settings(app: AppHandle, state: State<'_, AppState>, settings: Settings) -> Result<Settings> {
+    let mut settings = settings.normalized();
+    settings.hotkey = state.settings_snapshot().hotkey;
     settings.save(&state.settings_path)?;
     *state.settings.write().unwrap() = settings.clone();
+    let _ = app.emit("settings-changed", &settings);
     Ok(settings)
+}
+
+/// Ids of every beatmapset already in the Songs folder. Also (re)starts the folder watcher
+/// that produces `library-changed` events.
+#[tauri::command]
+pub async fn get_installed(state: State<'_, AppState>) -> Result<Vec<u32>> {
+    let settings = state.settings_snapshot();
+    let library = state.library.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let songs = osu_locator::detect(&settings)
+            .map(|install| install.songs_dir)
+            .or_else(|| settings.songs_dir.clone());
+        library.sync(songs.as_deref())
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn show_overlay(app: AppHandle) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || overlay::show(&app))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))
+}
+
+#[tauri::command]
+pub fn hide_overlay(app: AppHandle) {
+    overlay::hide(&app, true);
+}
+
+#[tauri::command]
+pub async fn toggle_overlay(app: AppHandle) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || overlay::toggle(&app))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))
+}
+
+#[tauri::command]
+pub fn get_hotkey_status(state: State<'_, AppState>) -> HotkeyStatus {
+    state.hotkey_status.lock().unwrap().clone()
+}
+
+/// Changes the global hotkey. If Windows refuses the new one (another program owns it) the old
+/// one is put back, so the overlay never ends up without a shortcut.
+#[tauri::command]
+pub fn set_hotkey(app: AppHandle, state: State<'_, AppState>, hotkey: String) -> Result<HotkeyStatus> {
+    let hotkey = hotkey.trim().to_string();
+    hotkey::parse(&hotkey)?;
+    let previous = state.settings_snapshot().hotkey;
+    {
+        let status = state.hotkey_status.lock().unwrap();
+        if hotkey == previous && status.registered {
+            return Ok(status.clone());
+        }
+    }
+
+    hotkey::unregister(&app, &previous);
+    if let Err(error) = hotkey::register(&app, &hotkey) {
+        let restored = hotkey::register(&app, &previous);
+        *state.hotkey_status.lock().unwrap() = HotkeyStatus::from_result(&previous, &restored);
+        return Err(error);
+    }
+
+    let mut settings = state.settings_snapshot();
+    settings.hotkey = hotkey.clone();
+    settings.save(&state.settings_path)?;
+    *state.settings.write().unwrap() = settings.clone();
+    let status = HotkeyStatus::from_result(&hotkey, &Ok(()));
+    *state.hotkey_status.lock().unwrap() = status.clone();
+    tray::refresh_hotkey(&app, &hotkey);
+    let _ = app.emit("settings-changed", &settings);
+    Ok(status)
+}
+
+/// Opens a beatmapset's page on osu.ppy.sh in the default browser.
+#[tauri::command]
+pub fn open_beatmapset_page(app: AppHandle, set_id: u32) -> Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(format!("https://osu.ppy.sh/beatmapsets/{set_id}"), None::<&str>)
+        .map_err(|e| AppError::Task(e.to_string()))
 }

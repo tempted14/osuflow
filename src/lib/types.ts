@@ -101,6 +101,27 @@ export interface Settings {
   songsDir: string | null;
   noVideo: boolean;
   mirrorOrder: Mirror[];
+  hotkey: string;
+  hideInstalled: boolean;
+}
+
+export interface HotkeyStatus {
+  hotkey: string;
+  /** False when Windows refused the shortcut, usually because another program owns it. */
+  registered: boolean;
+  error: string | null;
+}
+
+/** Sent with the `overlay-shown` event. */
+export interface OverlayContext {
+  osuRunning: boolean;
+  exclusiveFullscreen: boolean;
+}
+
+/** Payload of the `library-changed` event. */
+export interface LibraryDelta {
+  added: number[];
+  removed: number[];
 }
 
 export type DownloadState =
@@ -125,3 +146,14 @@ export interface DownloadProgressEvent {
 }
 
 export type ImportMethod = "launchedOsu" | "movedToSongs";
+
+/** One download as the overlay tracks it, built from the `download-*` events. */
+export interface DownloadJob {
+  setId: number;
+  label: string;
+  state: DownloadState;
+  received: number;
+  total: number | null;
+  error: string | null;
+  mirror: string | null;
+}

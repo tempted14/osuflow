@@ -20,6 +20,16 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Task(String),
+    #[error("hotkey: {0}")]
+    Hotkey(String),
+    #[error("osu! can't take a map right now: {0}")]
+    OsuBusy(crate::handoff::Blocked),
+    #[error(
+        "osu! hasn't imported it after {seconds} s. If osu! is showing a message, deal with that first, then try again. The download is kept at {path}"
+    )]
+    ImportStalled { seconds: u64, path: String },
+    #[error("Windows is still holding the downloaded file ({0}). Try again in a moment.")]
+    ArchiveLocked(String),
 }
 
 impl Serialize for AppError {
