@@ -15,6 +15,15 @@ export function longestLength(set: Pick<Beatmapset, "beatmaps">): number {
   return set.beatmaps.reduce((longest, map) => Math.max(longest, map.total_length), 0);
 }
 
+/** "2.1–6.4" for a set with several difficulties, "4.3" for one, null for none. */
+export function starRange(set: Pick<Beatmapset, "beatmaps">): string | null {
+  if (set.beatmaps.length === 0) return null;
+  const stars = set.beatmaps.map((map) => map.difficulty_rating);
+  const low = Math.min(...stars).toFixed(1);
+  const high = Math.max(...stars).toFixed(1);
+  return low === high ? low : `${low}–${high}`;
+}
+
 const megabytes = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
 export function downloadLabel(job: Pick<DownloadJob, "state" | "received" | "total">): string {

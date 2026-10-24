@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Beatmapset, DownloadJob } from "../lib/types";
 import { BeatmapCard } from "./BeatmapCard";
 
@@ -17,6 +17,8 @@ interface Props {
   error: string | null;
   /** While true the cards show no cover images, so the window doesn't keep them decoded in memory. */
   releaseCovers?: boolean;
+  /** What to show when nothing matches; the grid falls back to a plain line. */
+  empty?: ReactNode;
   /** Told how many columns fit, so arrow-key navigation matches what is on screen. */
   onColumnsChange: (columns: number) => void;
   onLoadMore: () => void;
@@ -117,7 +119,7 @@ export function ResultsGrid(props: Props) {
         ))}
       </ul>
       {!props.loading && !props.error && sets.length === 0 && (
-        <div className="notice">No maps found</div>
+        (props.empty ?? <div className="notice">No maps found</div>)
       )}
       {hasMore && <div className="sentinel" ref={sentinel} aria-hidden />}
     </div>

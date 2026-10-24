@@ -79,26 +79,58 @@ pub enum Sort {
     #[default]
     Relevance,
     RankedDate,
+    Updated,
+    Submitted,
     Plays,
     Favourites,
-    Updated,
+    Difficulty,
+    Bpm,
+    Length,
     Title,
     Artist,
-    Difficulty,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+impl SortDirection {
+    fn as_str(self) -> &'static str {
+        match self {
+            SortDirection::Asc => "asc",
+            SortDirection::Desc => "desc",
+        }
+    }
 }
 
 impl Sort {
-    /// osu.direct sorts with Meilisearch `<field>:<direction>` expressions.
-    fn osu_direct_expr(self) -> Option<&'static str> {
+    /// The field osu.direct sorts this by (checked live 2026-10-24: each of these reorders results in both
+    /// directions; `hype` and `max_combo` are refused, so they are not offered). Relevance is the default
+    /// order and has no field.
+    fn osu_direct_field(self) -> Option<&'static str> {
         match self {
             Sort::Relevance => None,
-            Sort::RankedDate => Some("ranked_date:desc"),
-            Sort::Plays => Some("play_count:desc"),
-            Sort::Favourites => Some("favourite_count:desc"),
-            Sort::Updated => Some("last_updated:desc"),
-            Sort::Title => Some("title:asc"),
-            Sort::Artist => Some("artist:asc"),
-            Sort::Difficulty => Some("beatmaps.difficulty_rating:desc"),
+            Sort::RankedDate => Some("ranked_date"),
+            Sort::Updated => Some("last_updated"),
+            Sort::Submitted => Some("submitted_date"),
+            Sort::Plays => Some("play_count"),
+            Sort::Favourites => Some("favourite_count"),
+            Sort::Difficulty => Some("beatmaps.difficulty_rating"),
+            Sort::Bpm => Some("bpm"),
+            Sort::Length => Some("beatmaps.total_length"),
+            Sort::Title => Some("title"),
+            Sort::Artist => Some("artist"),
+        }
+    }
+
+    /// The direction people expect first: A to Z for names, biggest or newest first for everything else.
+    pub fn default_direction(self) -> SortDirection {
+        match self {
+            Sort::Title | Sort::Artist => SortDirection::Asc,
+            _ => SortDirection::Desc,
         }
     }
 }
@@ -112,6 +144,8 @@ pub struct SearchQuery {
     /// osu! API status: -2 graveyard, -1 wip, 0 pending, 1 ranked, 2 approved, 3 qualified, 4 loved.
     pub status: i8,
     pub sort: Sort,
+    /// Which way to sort; `None` means the sort's usual direction (see `Sort::default_direction`).
+    pub direction: Option<SortDirection>,
     pub offset: u32,
     pub limit: u32,
 }
@@ -123,6 +157,7 @@ impl Default for SearchQuery {
             mode: None,
             status: 1,
             sort: Sort::Relevance,
+            direction: None,
             offset: 0,
             limit: 50,
         }
@@ -137,9 +172,17 @@ impl SearchQuery {
             mode: self.mode.filter(|m| *m <= 3),
             status: if (-2..=4).contains(&self.status) { self.status } else { 1 },
             sort: self.sort,
+            direction: self.direction,
             offset: self.offset,
             limit: self.limit.clamp(1, MAX_PAGE),
         }
+    }
+
+    /// osu.direct sorts with Meilisearch `<field>:<direction>` expressions; `None` for relevance.
+    fn sort_expr(&self) -> Option<String> {
+        let field = self.sort.osu_direct_field()?;
+        let direction = self.direction.unwrap_or_else(|| self.sort.default_direction());
+        Some(format!("{field}:{}", direction.as_str()))
     }
 
     fn cache_key(&self) -> String {
@@ -148,7 +191,8 @@ impl SearchQuery {
             self.query.to_lowercase(),
             self.mode,
             self.status,
-            self.sort,
+            // The expression, not the two parts: "title" and "title ascending" are the same search.
+            self.sort_expr(),
             self.offset,
             self.limit
         )
@@ -262,9 +306,9 @@ impl MirrorSet {
             pairs.append_pair(page_param, &query.limit.to_string());
             pairs.append_pair("offset", &query.offset.to_string());
             if mirror.supports_sort()
-                && let Some(expr) = query.sort.osu_direct_expr()
+                && let Some(expr) = query.sort_expr()
             {
-                pairs.append_pair("sort", expr);
+                pairs.append_pair("sort", &expr);
             }
         }
         url
@@ -470,6 +514,7 @@ mod tests {
             mode: Some(0),
             status: 1,
             sort: Sort::Plays,
+            direction: None,
             offset: 50,
             limit: 25,
         };
@@ -488,6 +533,43 @@ mod tests {
         let set = MirrorSet::with_bases("http://c.test", "http://o.test");
         let url = set.search_url(MirrorId::OsuDirect, &query("x"));
         assert_eq!(url.as_str(), "http://o.test/api/v2/search?q=x&status=1&amount=50&offset=0");
+    }
+
+    #[test]
+    fn every_sort_names_its_osu_direct_field_and_direction() {
+        let set = MirrorSet::with_bases("http://c.test", "http://o.test");
+        let sort_of = |sort: Sort, direction: Option<SortDirection>| {
+            let q = SearchQuery { sort, direction, ..query("x") };
+            set.search_url(MirrorId::OsuDirect, &q)
+                .query_pairs()
+                .find(|(key, _)| key == "sort")
+                .map(|(_, value)| value.into_owned())
+        };
+        // Each sort starts in the direction people expect...
+        assert_eq!(sort_of(Sort::RankedDate, None).as_deref(), Some("ranked_date:desc"));
+        assert_eq!(sort_of(Sort::Updated, None).as_deref(), Some("last_updated:desc"));
+        assert_eq!(sort_of(Sort::Submitted, None).as_deref(), Some("submitted_date:desc"));
+        assert_eq!(sort_of(Sort::Plays, None).as_deref(), Some("play_count:desc"));
+        assert_eq!(sort_of(Sort::Favourites, None).as_deref(), Some("favourite_count:desc"));
+        assert_eq!(sort_of(Sort::Difficulty, None).as_deref(), Some("beatmaps.difficulty_rating:desc"));
+        assert_eq!(sort_of(Sort::Bpm, None).as_deref(), Some("bpm:desc"));
+        assert_eq!(sort_of(Sort::Length, None).as_deref(), Some("beatmaps.total_length:desc"));
+        assert_eq!(sort_of(Sort::Title, None).as_deref(), Some("title:asc"));
+        assert_eq!(sort_of(Sort::Artist, None).as_deref(), Some("artist:asc"));
+        // ...and either direction can be asked for.
+        assert_eq!(sort_of(Sort::Bpm, Some(SortDirection::Asc)).as_deref(), Some("bpm:asc"));
+        assert_eq!(sort_of(Sort::Title, Some(SortDirection::Desc)).as_deref(), Some("title:desc"));
+        // Relevance has no order to reverse.
+        assert_eq!(sort_of(Sort::Relevance, Some(SortDirection::Asc)), None);
+    }
+
+    #[test]
+    fn the_cache_tells_directions_apart_but_not_a_default_from_an_explicit_default() {
+        let key = |sort, direction| SearchQuery { sort, direction, ..query("x") }.cache_key();
+        assert_ne!(key(Sort::Plays, Some(SortDirection::Desc)), key(Sort::Plays, Some(SortDirection::Asc)));
+        assert_eq!(key(Sort::Plays, None), key(Sort::Plays, Some(SortDirection::Desc)));
+        assert_eq!(key(Sort::Title, None), key(Sort::Title, Some(SortDirection::Asc)));
+        assert_eq!(key(Sort::Relevance, None), key(Sort::Relevance, Some(SortDirection::Asc)));
     }
 
     #[test]

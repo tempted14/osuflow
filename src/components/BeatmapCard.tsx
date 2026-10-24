@@ -1,10 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
-import { downloadFraction, downloadLabel, formatLength, longestLength } from "../lib/format";
+import { downloadFraction, downloadLabel, formatLength, longestLength, starRange } from "../lib/format";
 import { isBusy } from "../lib/jobs";
 import { starColor } from "../lib/starColor";
 import type { Beatmap, Beatmapset, DownloadJob } from "../lib/types";
 
-const MAX_DOTS = 8;
+const MAX_DOTS = 6;
 
 type IconName = "download" | "check" | "retry" | "close" | "play" | "pause";
 
@@ -111,7 +111,11 @@ export function BeatmapCard(props: {
   onSelect: () => void;
 }) {
   const { set } = props;
-  const cover = set.covers["card@2x"] || set.covers.card;
+  // The cover strip is 400x140, which is plenty on ordinary screens and a quarter of the memory of the 2x file
+  // once decoded. Only dense screens (above 1.5x) get the sharper one.
+  const sharp = window.devicePixelRatio > 1.5;
+  const cover = (sharp ? set.covers["card@2x"] : set.covers.card) || set.covers["card@2x"] || set.covers.card;
+  const stars = starRange(set);
   const classes = ["card", props.selected && "selected", props.installed && "installed"];
   return (
     <li
@@ -123,7 +127,7 @@ export function BeatmapCard(props: {
       onMouseDown={props.onSelect}
     >
       <div className="cover">
-        {cover && !props.releaseCover && <img src={cover} alt="" loading="lazy" draggable={false} />}
+        {cover && !props.releaseCover && <img src={cover} alt="" loading="lazy" decoding="async" draggable={false} />}
         <button
           className={`play${props.playing ? " on" : ""}`}
           onClick={props.onPreview}
@@ -138,16 +142,15 @@ export function BeatmapCard(props: {
           <div className="title" title={set.title}>
             {set.title}
           </div>
-          <div className="artist" title={set.artist}>
+          <div className="artist" title={`${set.artist} · mapped by ${set.creator}`}>
             {set.artist}
+            <span className="by"> · mapped by {set.creator}</span>
           </div>
           <div className="meta">
             <DifficultyDots beatmaps={set.beatmaps} />
-            <span className="facts">
+            <span className="facts" title="Star rating of the easiest and hardest difficulty, length, BPM">
+              {stars && `★ ${stars} · `}
               {formatLength(longestLength(set))} · {Math.round(set.bpm)} bpm
-            </span>
-            <span className="mapper" title={`Mapped by ${set.creator}`}>
-              by {set.creator}
             </span>
           </div>
         </div>

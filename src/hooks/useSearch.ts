@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import { mergeResults, planFetch, searchKey } from "../lib/results";
-import type { FetchRecord } from "../lib/results";
-import type { Beatmapset, Mirror, Sort } from "../lib/types";
+import { mergeResults, parseBeatmapReference, planFetch, searchKey } from "../lib/results";
+import type { FetchRecord, Tier } from "../lib/results";
+import type { Beatmapset, Mirror, Sort, SortDirection } from "../lib/types";
 
 export interface SearchParams {
   text: string;
@@ -10,6 +10,26 @@ export interface SearchParams {
   mode: number | null;
   status: number;
   sort: Sort;
+  dir: SortDirection;
+  /** A star-rating band, applied to the results here (the mirrors can't filter by stars), so it never refetches. */
+  tier: Tier;
+}
+
+/** The set a pasted link or id points at, or null when nothing is found (the text is then searched as words). */
+async function findByReference(text: string): Promise<Beatmapset | null> {
+  const reference = parseBeatmapReference(text);
+  if (!reference) return null;
+  const asSet = () => api.lookupBeatmapset(reference.id);
+  const asBeatmap = async () => api.lookupBeatmapset(await api.resolveSetId(reference.id));
+  const readings = reference.kind === "set" ? [asSet] : reference.kind === "beatmap" ? [asBeatmap] : [asSet, asBeatmap];
+  for (const reading of readings) {
+    try {
+      return await reading();
+    } catch {
+      // This reading found nothing: try the next one, and after the last fall back to an ordinary search.
+    }
+  }
+  return null;
 }
 
 const PAGE_SIZE = 30;
@@ -58,19 +78,24 @@ export function useSearch(params: SearchParams, enabled: boolean) {
   const lastFetch = useRef<FetchRecord | null>(null);
   /** The query whose first page is on its way, so opening the overlay doesn't restart it. */
   const inFlight = useRef<string | null>(null);
-  const key = searchKey({ text: params.text, mode: params.mode, status: params.status, sort: params.sort });
+  const key = searchKey({ text: params.text, mode: params.mode, status: params.status, sort: params.sort, dir: params.dir });
 
   const fetchPage = useCallback(
     async (offset: number, forGeneration: number) => {
       try {
-        const response = await api.search({
-          query: params.text,
-          mode: params.mode,
-          status: params.status,
-          sort: params.sort,
-          offset,
-          limit: PAGE_SIZE,
-        });
+        // A pasted link or id is looked up directly; anything else, or a lookup that finds nothing, is a search.
+        const found = offset === 0 ? await findByReference(params.text) : null;
+        const response = found
+          ? { results: [found], mirror: null, sortApplied: true, hasMore: false }
+          : await api.search({
+              query: params.text,
+              mode: params.mode,
+              status: params.status,
+              sort: params.sort,
+              direction: params.sort === "relevance" ? null : params.dir,
+              offset,
+              limit: PAGE_SIZE,
+            });
         if (forGeneration !== generation.current) return;
         if (offset === 0) {
           lastFetch.current = { key, at: performance.now() };
@@ -92,7 +117,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
         setState((current) => ({ ...current, loading: false, error: String(error), failedOffset: offset }));
       }
     },
-    [params.text, params.mode, params.status, params.sort, key],
+    [params.text, params.mode, params.status, params.sort, params.dir, key],
   );
 
   // A new query, the overlay opening, or the app starting: fetch the first page when it is

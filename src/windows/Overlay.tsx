@@ -12,10 +12,10 @@ import type { SearchParams } from "../hooks/useSearch";
 import { useSettings } from "../hooks/useSettings";
 import { setLabel } from "../lib/format";
 import { isNavKey, moveSelection } from "../lib/nav";
-import { visibleResults } from "../lib/results";
+import { FILTER_WANT, keepPaging, visibleResults } from "../lib/results";
 import type { Beatmapset, OverlayContext } from "../lib/types";
 
-const START: SearchParams = { text: "", mode: null, status: 1, sort: "relevance" };
+const START: SearchParams = { text: "", mode: null, status: 1, sort: "relevance", dir: "desc", tier: "any" };
 const hide = () => void api.hideOverlay();
 /** Hidden this long, the overlay lets go of its cover images: decoded, they are most of its memory. */
 const RELEASE_COVERS_AFTER_MS = 15_000;
@@ -64,8 +64,8 @@ export default function Overlay() {
 
   const keep = useMemo(() => new Set(jobs.map((job) => job.setId)), [jobs]);
   const sets = useMemo(
-    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep),
-    [search.results, installed, settings?.hideInstalled, keep],
+    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep, params.tier, params.mode),
+    [search.results, installed, settings?.hideInstalled, keep, params.tier, params.mode],
   );
 
   const focusSearch = useCallback((selectAll = false) => {
@@ -111,6 +111,51 @@ export default function Overlay() {
     setParams((current) => ({ ...current, ...patch }));
     setSelected(-1);
   }, []);
+
+  const preview = useCallback((set: Beatmapset) => togglePreview(set.id, set.preview_url), [togglePreview]);
+
+  // The star filter runs here on what the mirrors sent, so a rare band can leave the grid nearly empty.
+  // More pages are fetched for it, but only a few at a time; "Keep searching" asks for a few more.
+  const pagesTried = useRef(0);
+  const [capped, setCapped] = useState(false);
+  const signature = [params.text, params.mode, params.status, params.sort, params.dir, params.tier].join("|");
+  useEffect(() => {
+    pagesTried.current = 0;
+    setCapped(false);
+  }, [signature]);
+
+  const sparse = params.tier !== "any" && sets.length < FILTER_WANT;
+  const { loadMore: fetchMore, loading: fetching } = search;
+  const loadMore = useCallback(() => {
+    // A page already on its way isn't another one: asking again would only use up the allowance.
+    if (fetching) return;
+    if (sparse && !keepPaging(params.tier, sets.length, pagesTried.current)) {
+      setCapped(true);
+      return;
+    }
+    if (sparse) pagesTried.current += 1;
+    fetchMore();
+  }, [fetching, sparse, params.tier, sets.length, fetchMore]);
+  const keepSearching = () => {
+    pagesTried.current = 0;
+    setCapped(false);
+    fetchMore();
+  };
+
+  const filtersOn = params.tier !== "any" || params.status !== 1 || params.mode !== null;
+  const empty = (
+    <div className="notice empty">
+      <strong>No maps found</strong>
+      <span>
+        {params.tier !== "any"
+          ? "Try another difficulty."
+          : params.text
+            ? "Try fewer or different words."
+            : "Try another status."}
+      </span>
+      {filtersOn && <button onClick={() => changeParams({ tier: "any", status: 1, mode: null })}>Reset filters</button>}
+    </div>
+  );
 
   useEffect(() => {
     if (!visible) return;
@@ -167,7 +212,16 @@ export default function Overlay() {
         onClose={hide}
       />
       <div className={`loadbar${search.loading ? " on" : ""}`} aria-hidden />
-      {tip && <p className="hint">{tip}</p>}
+      {capped && sparse && search.hasMore ? (
+        <p className="hint">
+          Few maps match this difficulty so far.{" "}
+          <button className="link" onClick={keepSearching}>
+            Keep searching
+          </button>
+        </p>
+      ) : (
+        tip && <p className="hint">{tip}</p>
+      )}
       <ResultsGrid
         // Prefetched results wait as data. Mounted while hidden, thirty cards would keep layout
         // and compositor layers alive (measured: about 12 MB) for a window nobody can see.
@@ -181,12 +235,13 @@ export default function Overlay() {
         error={search.error}
         releaseCovers={coversReleased}
         onColumnsChange={setColumns}
-        onLoadMore={search.loadMore}
+        empty={empty}
+        onLoadMore={loadMore}
         onRetry={search.retry}
         onSelect={setSelected}
         onDownload={download}
         onCancel={cancel}
-        onPreview={(set) => togglePreview(set.id, set.preview_url)}
+        onPreview={preview}
       />
       <DownloadsDrawer
         jobs={jobs}

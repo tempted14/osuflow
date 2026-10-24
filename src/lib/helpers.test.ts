@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadFraction, downloadLabel, formatLength, longestLength, setLabel } from "./format";
+import { downloadFraction, downloadLabel, formatLength, longestLength, setLabel, starRange } from "./format";
 import { hotkeyFromEvent } from "./hotkey";
 import { autoHideMs, browserName, linkMode, toastLine, toastProgress } from "./links";
 import {
@@ -13,8 +13,21 @@ import {
   upsertJob,
 } from "./jobs";
 import { isNavKey, moveSelection } from "./nav";
-import { FRESH_FOR_MS, applyLibraryDelta, mergeResults, planFetch, searchKey, visibleResults } from "./results";
+import {
+  FILTER_AUTO_PAGES,
+  FILTER_WANT,
+  FRESH_FOR_MS,
+  applyLibraryDelta,
+  hasDifficultyIn,
+  keepPaging,
+  mergeResults,
+  parseBeatmapReference,
+  planFetch,
+  searchKey,
+  visibleResults,
+} from "./results";
 import type { FetchSituation } from "./results";
+import { SORTS, defaultDirection, directionWords, reverse } from "./sorting";
 import { starColor } from "./starColor";
 import type {
   Beatmap,
@@ -159,6 +172,124 @@ describe("download jobs", () => {
     expect(jobs.map(isBusy)).toEqual([true, false, false]);
     expect(removeFinished(jobs).map((j) => j.setId)).toEqual([1]);
     expect(removeJob(jobs, 2).map((j) => j.setId)).toEqual([1, 3]);
+  });
+});
+
+describe("sorting", () => {
+  it("offers each order once, with best match first", () => {
+    const values = SORTS.map((option) => option.value);
+    expect(new Set(values).size).toBe(values.length);
+    expect(values[0]).toBe("relevance");
+    expect(values).toEqual(
+      expect.arrayContaining(["rankedDate", "updated", "submitted", "plays", "favourites", "difficulty", "bpm", "length", "title", "artist"]),
+    );
+  });
+
+  it("starts names A to Z and everything else biggest or newest first", () => {
+    expect(defaultDirection("title")).toBe("asc");
+    expect(defaultDirection("artist")).toBe("asc");
+    for (const sort of ["rankedDate", "updated", "submitted", "plays", "favourites", "difficulty", "bpm", "length"] as const) {
+      expect(defaultDirection(sort)).toBe("desc");
+    }
+  });
+
+  it("says in plain words what each direction means, and nothing for best match", () => {
+    expect(directionWords("rankedDate", "desc")).toBe("Newest first");
+    expect(directionWords("rankedDate", "asc")).toBe("Oldest first");
+    expect(directionWords("difficulty", "desc")).toBe("Hardest first");
+    expect(directionWords("difficulty", "asc")).toBe("Easiest first");
+    expect(directionWords("bpm", "desc")).toBe("Fastest first");
+    expect(directionWords("length", "asc")).toBe("Shortest first");
+    expect(directionWords("title", "asc")).toBe("A to Z");
+    expect(directionWords("relevance", "desc")).toBeNull();
+  });
+
+  it("reverses a direction", () => {
+    expect(reverse("asc")).toBe("desc");
+    expect(reverse("desc")).toBe("asc");
+  });
+
+  it("keys a search by its direction, except for best match, which has none", () => {
+    const base = { text: "x", mode: null, status: 1, sort: "plays" };
+    expect(searchKey({ ...base, dir: "desc" })).not.toBe(searchKey({ ...base, dir: "asc" }));
+    const relevance = { ...base, sort: "relevance" };
+    expect(searchKey({ ...relevance, dir: "asc" })).toBe(searchKey({ ...relevance, dir: "desc" }));
+  });
+});
+
+describe("the difficulty filter", () => {
+  const stars = (...ratings: number[]) => ({
+    beatmaps: ratings.map((difficulty_rating, id) => ({ id, difficulty_rating, mode_int: 0 })) as Beatmap[],
+  });
+
+  it("matches a set that has a difficulty inside the band, exactly at the edges", () => {
+    expect(hasDifficultyIn(stars(1.99), "easy", null)).toBe(true);
+    expect(hasDifficultyIn(stars(2), "easy", null)).toBe(false); // 2.0 is where Normal starts
+    expect(hasDifficultyIn(stars(2), "normal", null)).toBe(true);
+    expect(hasDifficultyIn(stars(6.49), "expert", null)).toBe(true);
+    expect(hasDifficultyIn(stars(6.5), "expert", null)).toBe(false);
+    expect(hasDifficultyIn(stars(6.5), "expertPlus", null)).toBe(true);
+    expect(hasDifficultyIn(stars(1.2, 4.5), "insane", null)).toBe(true);
+    expect(hasDifficultyIn(stars(1.2, 5.8), "insane", null)).toBe(false); // nothing between 4 and 5.3
+    expect(hasDifficultyIn(stars(9), "any", null)).toBe(true);
+  });
+
+  it("counts only the chosen mode's difficulties", () => {
+    const mixed = {
+      beatmaps: [
+        { id: 1, difficulty_rating: 3, mode_int: 0 },
+        { id: 2, difficulty_rating: 7, mode_int: 3 },
+      ] as Beatmap[],
+    };
+    expect(hasDifficultyIn(mixed, "expertPlus", 0)).toBe(false);
+    expect(hasDifficultyIn(mixed, "expertPlus", 3)).toBe(true);
+    expect(hasDifficultyIn(mixed, "expertPlus", null)).toBe(true);
+  });
+
+  it("trims the grid to the band, together with hide installed", () => {
+    const easy = { id: 1, ...stars(1.5) } as Beatmapset;
+    const hard = { id: 2, ...stars(3.5) } as Beatmapset;
+    expect(visibleResults([easy, hard], new Set(), false, new Set(), "hard", null).map((s) => s.id)).toEqual([2]);
+    expect(visibleResults([easy, hard], new Set([2]), true, new Set(), "hard", null)).toEqual([]);
+    expect(visibleResults([easy, hard], new Set(), false, new Set(), "any", null)).toHaveLength(2);
+  });
+
+  it("fetches more pages by itself only while few maps match, and only so far", () => {
+    expect(keepPaging("any", 0, 0)).toBe(false);
+    expect(keepPaging("hard", FILTER_WANT - 1, 0)).toBe(true);
+    expect(keepPaging("hard", FILTER_WANT, 0)).toBe(false);
+    expect(keepPaging("hard", 0, FILTER_AUTO_PAGES - 1)).toBe(true);
+    expect(keepPaging("hard", 0, FILTER_AUTO_PAGES)).toBe(false);
+  });
+
+  it("shows the star range of a set's difficulties", () => {
+    const range = (...ratings: number[]) => starRange(stars(...ratings));
+    expect(range(2.14, 6.449)).toBe("2.1–6.4");
+    expect(range(4.3)).toBe("4.3");
+    expect(range(4.31, 4.34)).toBe("4.3");
+    expect(range()).toBeNull();
+  });
+});
+
+describe("pasted links and ids", () => {
+  it("reads osu! links to sets and to single beatmaps", () => {
+    expect(parseBeatmapReference("https://osu.ppy.sh/beatmapsets/39804#osu/129891")).toEqual({ kind: "set", id: 39804 });
+    expect(parseBeatmapReference("  https://osu.ppy.sh/s/39804 ")).toEqual({ kind: "set", id: 39804 });
+    expect(parseBeatmapReference("https://osu.ppy.sh/b/129891")).toEqual({ kind: "beatmap", id: 129891 });
+    expect(parseBeatmapReference("http://old.ppy.sh/beatmaps/129891")).toEqual({ kind: "beatmap", id: 129891 });
+  });
+
+  it("reads a bare id only when it is long enough to be one", () => {
+    expect(parseBeatmapReference("2621681")).toEqual({ kind: "either", id: 2621681 });
+    expect(parseBeatmapReference("1999")).toBeNull();
+    expect(parseBeatmapReference("freedom dive")).toBeNull();
+    expect(parseBeatmapReference("12345678901")).toBeNull();
+  });
+
+  it("ignores other sites and other pages", () => {
+    expect(parseBeatmapReference("https://example.com/b/129891")).toBeNull();
+    expect(parseBeatmapReference("https://osu.ppy.sh.evil.example/b/129891")).toBeNull();
+    expect(parseBeatmapReference("https://osu.ppy.sh/users/2")).toBeNull();
   });
 });
 

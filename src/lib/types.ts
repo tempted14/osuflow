@@ -6,12 +6,17 @@ export type Mirror = "catboy" | "osuDirect";
 export type Sort =
   | "relevance"
   | "rankedDate"
+  | "updated"
+  | "submitted"
   | "plays"
   | "favourites"
-  | "updated"
+  | "difficulty"
+  | "bpm"
+  | "length"
   | "title"
-  | "artist"
-  | "difficulty";
+  | "artist";
+
+export type SortDirection = "asc" | "desc";
 
 export interface Covers {
   cover: string;
@@ -76,6 +81,8 @@ export interface SearchQuery {
   /** -2 graveyard, -1 wip, 0 pending, 1 ranked, 2 approved, 3 qualified, 4 loved. */
   status: number;
   sort: Sort;
+  /** Which way to sort; null for relevance, which has no direction. */
+  direction: SortDirection | null;
   offset: number;
   limit: number;
 }
