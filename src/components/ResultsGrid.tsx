@@ -117,9 +117,8 @@ export function ResultsGrid(props: Props) {
         ))}
       </ul>
       {!props.loading && !props.error && sets.length === 0 && (
-        <div className="notice">No maps match. Try fewer words, another status, or all modes.</div>
+        <div className="notice">No maps found</div>
       )}
-      {props.loading && sets.length > 0 && <div className="notice">Loading more…</div>}
       {hasMore && <div className="sentinel" ref={sentinel} aria-hidden />}
     </div>
   );

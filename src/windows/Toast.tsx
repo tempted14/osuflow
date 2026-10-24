@@ -71,7 +71,7 @@ export default function Toast() {
             void api.dismissToast();
           }}
         >
-          Open page instead
+          Open page
         </button>
       </div>
     </div>

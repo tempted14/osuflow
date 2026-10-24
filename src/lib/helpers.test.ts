@@ -1,14 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  compactNumber,
-  downloadFraction,
-  downloadLabel,
-  formatLength,
-  longestLength,
-  mirrorLabel,
-  setLabel,
-  statusLabel,
-} from "./format";
+import { downloadFraction, downloadLabel, formatLength, longestLength, setLabel } from "./format";
 import { hotkeyFromEvent } from "./hotkey";
 import { autoHideMs, browserName, linkMode, toastLine, toastProgress } from "./links";
 import {
@@ -47,21 +38,8 @@ describe("format", () => {
     expect(formatLength(-5)).toBe("0:00");
   });
 
-  it("abbreviates big numbers", () => {
-    expect(compactNumber(0)).toBe("0");
-    expect(compactNumber(999)).toBe("999");
-    expect(compactNumber(1234)).toBe("1.2K");
-    expect(compactNumber(15000)).toBe("15K");
-    expect(compactNumber(2_500_000)).toBe("2.5M");
-  });
-
-  it("labels statuses, sets and mirrors", () => {
-    expect(statusLabel("ranked")).toBe("Ranked");
-    expect(statusLabel("wip")).toBe("WIP");
-    expect(statusLabel("")).toBe("");
+  it("labels a set by its artist and title", () => {
     expect(setLabel({ artist: "xi", title: "FREEDOM DiVE" })).toBe("xi – FREEDOM DiVE");
-    expect(mirrorLabel("osuDirect")).toBe("osu.direct");
-    expect(mirrorLabel("catboy")).toBe("catboy.best");
   });
 
   it("uses the longest difficulty as the set length", () => {

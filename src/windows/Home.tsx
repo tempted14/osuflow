@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as api from "../lib/api";
 import { LinkSettings } from "../components/LinkSettings";
@@ -10,27 +10,22 @@ import type { HotkeyStatus, OsuInstall } from "../lib/types";
 
 const DEFAULT_HOTKEY = "Ctrl+Shift+D";
 
-const SOURCE: Record<OsuInstall["source"], string> = {
-  settings: "from your settings",
-  runningProcess: "running right now",
-  registry: "found through the .osz file association",
-  defaultPath: "in the default folder",
-};
-
-/** One switch with its explanation; the whole row toggles it. */
-function SettingRow(props: { title: string; hint?: string; children: ReactNode }) {
+/** One labelled switch; the whole row toggles it. */
+function SwitchRow(props: { title: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
   return (
     <label className="setting">
-      <span className="setting-text">
-        <strong>{props.title}</strong>
-        {props.hint && <small>{props.hint}</small>}
-      </span>
-      {props.children}
+      <strong>{props.title}</strong>
+      <input
+        type="checkbox"
+        checked={props.checked}
+        disabled={props.disabled}
+        onChange={(e) => props.onChange(e.currentTarget.checked)}
+      />
     </label>
   );
 }
 
-/** The settings window: shows what osu!flow found and holds its few switches. */
+/** The settings window: a few flat rows, nothing more. */
 export default function Home() {
   const { settings, update } = useSettings();
   const [install, setInstall] = useState<OsuInstall | null | undefined>(undefined);
@@ -94,100 +89,75 @@ export default function Home() {
   return (
     <main className="home">
       <header className="hero">
-        <Logo size={56} />
-        <div>
-          <h1>osu!flow</h1>
-          <p className="lead">
-            Press <kbd>{status?.hotkey ?? "…"}</kbd> in osu! to search for maps and send them to the game without
-            leaving it.
-          </p>
-        </div>
+        <Logo size={30} />
+        <h1>osu!flow</h1>
+        <button className="quiet" onClick={() => void api.toggleOverlay()}>
+          Open search
+        </button>
       </header>
-      <button className="primary" onClick={() => void api.toggleOverlay()}>
-        Open the search now
-      </button>
 
-      <section className="group">
-        <h2>osu!</h2>
-        {install === undefined && <p className="muted">Looking for osu!…</p>}
-        {install === null && (
-          <p className="warn">
-            osu! stable wasn't found. Maps are still saved, but they can't be imported until it's installed.
-          </p>
-        )}
-        {install && (
-          <>
-            <p>
-              Found <code>{install.exe}</code> <span className="muted">({SOURCE[install.source]})</span>
-            </p>
-            <p className="muted">
-              Maps go into <code>{install.songsDir}</code>
-            </p>
-            {install.exclusiveFullscreen && (
-              <p className="warn">
-                osu! is set to exclusive fullscreen, so the overlay can't draw over it. Switch to borderless or
-                windowed in osu!'s Options → Graphics.
-              </p>
-            )}
-          </>
-        )}
-      </section>
+      <div className="setting">
+        <div className="setting-text">
+          <strong>osu!</strong>
+          {install === undefined && <small>Looking…</small>}
+          {install === null && (
+            <small className="warn">Not found. Maps are saved, but can't be imported until osu! is installed.</small>
+          )}
+          {install && (
+            <small className="path" title={`${install.exe}\nMaps go into ${install.songsDir}`}>
+              {install.dir}
+            </small>
+          )}
+          {install?.exclusiveFullscreen && (
+            <small className="warn">Exclusive fullscreen hides the overlay. Use borderless or windowed.</small>
+          )}
+        </div>
+        {install && <span className="status-dot" role="img" aria-label="osu! found" />}
+      </div>
 
-      <section className="group">
-        <h2>Shortcut</h2>
-        <div className="hotkey-row">
+      <div className="setting">
+        <strong>Shortcut</strong>
+        <div className="actions">
+          {shown !== DEFAULT_HOTKEY && (
+            <button className="quiet" onClick={() => setPending(DEFAULT_HOTKEY)} title="Back to Ctrl+Shift+D">
+              Reset
+            </button>
+          )}
+          {dirty && (
+            <button className="primary small" onClick={() => void save()} disabled={saving}>
+              Save
+            </button>
+          )}
           <input
             className="hotkey"
             readOnly
             value={shown}
             onKeyDown={capture}
+            title="Click, then press the new keys"
             aria-label="Shortcut. Click here and press the new keys."
           />
-          <button onClick={() => void save()} disabled={!dirty || saving}>
-            Save
-          </button>
-          <button onClick={() => setPending(DEFAULT_HOTKEY)} disabled={shown === DEFAULT_HOTKEY}>
-            Default
-          </button>
         </div>
-        <p className="muted">Click the box and press the keys you want, for example Ctrl+Alt+M.</p>
-        {error && <p className="warn">{error}</p>}
-        {status && !status.registered && !error && (
-          <p className="warn">
-            {status.error ?? "Windows didn't accept this shortcut."} Pick another one and save it.
-          </p>
-        )}
-      </section>
+      </div>
+      {error && <p className="warn note">{error}</p>}
+      {status && !status.registered && !error && (
+        <p className="warn note">{status.error ?? "Windows didn't accept this shortcut."} Pick another one and save it.</p>
+      )}
 
-      <section className="group">
-        <h2>Downloads</h2>
-        <SettingRow title="Skip videos" hint="Smaller, faster downloads">
-          <input
-            type="checkbox"
-            checked={settings?.noVideo ?? true}
-            disabled={!settings}
-            onChange={(e) => void update({ noVideo: e.currentTarget.checked })}
-          />
-        </SettingRow>
-      </section>
-
-      <section className="group">
-        <h2>Background</h2>
-        <SettingRow title="Start with Windows" hint="Waits quietly in the tray, ready for your shortcut">
-          <input
-            type="checkbox"
-            checked={autostart ?? false}
-            disabled={autostart === null}
-            onChange={(e) => void toggleAutostart(e.currentTarget.checked)}
-          />
-        </SettingRow>
-        {autostartError && <p className="warn">{autostartError}</p>}
-        <p className="muted">Closing this window keeps osu!flow running in the tray.</p>
-      </section>
+      <SwitchRow
+        title="Skip videos"
+        checked={settings?.noVideo ?? true}
+        disabled={!settings}
+        onChange={(on) => void update({ noVideo: on })}
+      />
+      <SwitchRow
+        title="Start with Windows"
+        checked={autostart ?? false}
+        disabled={autostart === null}
+        onChange={(on) => void toggleAutostart(on)}
+      />
+      {autostartError && <p className="warn note">{autostartError}</p>}
 
       <LinkSettings />
-
-      <p className="foot">osu!flow isn't affiliated with or endorsed by ppy.</p>
     </main>
   );
 }

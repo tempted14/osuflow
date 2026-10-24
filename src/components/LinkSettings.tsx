@@ -5,9 +5,9 @@ import { browserName, linkMode } from "../lib/links";
 import type { LinkHandlerStatus } from "../lib/types";
 
 /**
- * The opt-in "Beatmap links" section. Windows doesn't let an app make itself the default
- * browser, so turning it on is two steps: osu!flow registers itself, then the user chooses it
- * in Default apps. The status refreshes on its own so the second step ticks off when it happens.
+ * The opt-in "Beatmap links" row. Windows doesn't let an app make itself the default browser, so
+ * turning it on is two steps: osu!flow registers itself, then the user chooses it in Default apps.
+ * The status refreshes on its own so the second step ticks off when it happens.
  */
 export function LinkSettings() {
   const [status, setStatus] = useState<LinkHandlerStatus | null>(null);
@@ -62,46 +62,26 @@ export function LinkSettings() {
       return next;
     });
 
-  if (!status || !mode) return error ? <p className="warn">{error}</p> : null;
+  if (!status || !mode) return error ? <p className="warn note">{error}</p> : null;
   const browser = browserName(status.previousBrowser);
 
+  const line = {
+    off: `Download beatmap links from chat and lobbies. Other links still open in ${browser}.`,
+    waiting: "Last step: choose osu!flow in Windows' Default apps.",
+    active: `On. Other links still open in ${browser}.`,
+    forwarding: `Off, but Windows still sends links here. Choose ${browser} in Default apps to stop that.`,
+  }[mode];
+  const tone = mode === "waiting" || mode === "forwarding" ? "warn" : mode === "active" ? "ok-text" : "";
+
   return (
-    <section className="group">
-      <h2>Beatmap links</h2>
-      <p>
-        Click a beatmap link in osu! multiplayer, chat or Discord and osu!flow downloads the map instead of
-        opening a web page. Every other link still opens in {browser}.
-      </p>
-
-      <ol className="steps">
-        <li className={status.enabled && status.registered ? "ok" : ""}>
-          Turn it on here
-        </li>
-        <li className={status.isDefault ? "ok" : ""}>
-          Choose osu!flow in Windows' Default apps
-          <span className="muted"> (Windows only lets you do this step)</span>
-        </li>
-      </ol>
-
-      {mode === "off" && (
-        <p className="muted">Off. Nothing about your links changes until you turn this on.</p>
-      )}
-      {mode === "waiting" && (
-        <p className="warn">
-          Waiting for you to choose osu!flow in Default apps. Until then links keep opening as usual.
-        </p>
-      )}
-      {mode === "active" && <p className="ok-text">On. Beatmap links are downloaded; other links go to {browser}.</p>}
-      {mode === "forwarding" && (
-        <p className="warn">
-          Switched off, but Windows still sends your links to osu!flow, which passes them on to {browser}.
-          Choose {browser} in Default apps to stop that.
-        </p>
-      )}
-
-      <div className="row">
+    <div className="setting wrap">
+      <div className="setting-text">
+        <strong>Beatmap links</strong>
+        <small className={tone}>{line}</small>
+      </div>
+      <div className="actions">
         {!status.enabled ? (
-          <button className="primary" onClick={() => void turnOn()} disabled={busy}>
+          <button className="primary small" onClick={() => void turnOn()} disabled={busy}>
             Turn on
           </button>
         ) : (
@@ -111,16 +91,21 @@ export function LinkSettings() {
         )}
         {(status.enabled || status.isDefault) && (
           <button onClick={() => void run(api.openDefaultApps)} disabled={busy}>
-            Open Default apps
+            Default apps
           </button>
         )}
         {status.registered && !status.enabled && !status.isDefault && (
-          <button onClick={() => void run(api.removeLinkRegistration)} disabled={busy}>
-            Remove from Windows
+          <button
+            className="quiet"
+            onClick={() => void run(api.removeLinkRegistration)}
+            disabled={busy}
+            title="Remove osu!flow from Windows' list of browsers"
+          >
+            Remove
           </button>
         )}
       </div>
-      {error && <p className="warn">{error}</p>}
-    </section>
+      {error && <p className="warn note wide">{error}</p>}
+    </div>
   );
 }

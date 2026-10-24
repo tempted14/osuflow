@@ -10,7 +10,7 @@ import { usePreview } from "../hooks/usePreview";
 import { useSearch } from "../hooks/useSearch";
 import type { SearchParams } from "../hooks/useSearch";
 import { useSettings } from "../hooks/useSettings";
-import { mirrorLabel, setLabel } from "../lib/format";
+import { setLabel } from "../lib/format";
 import { isNavKey, moveSelection } from "../lib/nav";
 import { visibleResults } from "../lib/results";
 import type { Beatmapset, OverlayContext } from "../lib/types";
@@ -27,7 +27,7 @@ function tipFor(context: OverlayContext | null): string | null {
   if (context.exclusiveFullscreen) {
     return "osu! is in exclusive fullscreen, so this overlay can't draw over the game. Switch osu! to borderless or windowed in Options → Graphics.";
   }
-  if (!context.osuRunning) return "osu! isn't running. Downloaded maps will start it to import them.";
+  if (!context.osuRunning) return "osu! isn't running. Downloads will open it.";
   return null;
 }
 
@@ -153,8 +153,8 @@ export default function Overlay() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [visible, sets, selected, columns, download, togglePreview, focusSearch]);
 
-  const tip = tipFor(context);
-  const mirror = search.mirror ? mirrorLabel(search.mirror) : null;
+  // One quiet line at most: a problem that changes what the overlay can do, never a status report.
+  const tip = tipFor(context) ?? (search.sortApplied ? null : "This mirror can't sort, so these are best matches.");
 
   return (
     <div className={`panel${visible ? " visible" : ""}`} role="dialog" aria-label="osu!flow map search">
@@ -166,7 +166,8 @@ export default function Overlay() {
         onSettings={updateSettings}
         onClose={hide}
       />
-      {tip && <p className="tip">{tip}</p>}
+      <div className={`loadbar${search.loading ? " on" : ""}`} aria-hidden />
+      {tip && <p className="hint">{tip}</p>}
       <ResultsGrid
         // Prefetched results wait as data. Mounted while hidden, thirty cards would keep layout
         // and compositor layers alive (measured: about 12 MB) for a window nobody can see.
@@ -187,21 +188,14 @@ export default function Overlay() {
         onCancel={cancel}
         onPreview={(set) => togglePreview(set.id, set.preview_url)}
       />
-      <footer className="statusbar">
-        <span className="status-text">
-          {search.loading ? "Searching…" : `${sets.length} maps${mirror ? ` · ${mirror}` : ""}`}
-          {!search.sortApplied && " · this mirror can't sort, so these are best matches"}
-        </span>
-        <DownloadsDrawer
-          jobs={jobs}
-          onCancel={cancel}
-          onRetry={(job) => startDownload(job.setId, job.label)}
-          onDismiss={dismiss}
-          onClear={clearFinished}
-          onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
-        />
-        <span className="keys">↑↓←→ select · Enter download · Space preview · Esc close</span>
-      </footer>
+      <DownloadsDrawer
+        jobs={jobs}
+        onCancel={cancel}
+        onRetry={(job) => startDownload(job.setId, job.label)}
+        onDismiss={dismiss}
+        onClear={clearFinished}
+        onOpenPage={(setId) => void api.openBeatmapsetPage(setId)}
+      />
     </div>
   );
 }

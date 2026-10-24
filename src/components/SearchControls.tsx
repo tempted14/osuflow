@@ -38,6 +38,7 @@ function SearchIcon() {
   );
 }
 
+/** The search box and one quiet row of filters. "Esc" doubles as the close button. */
 export function SearchControls(props: {
   inputRef: RefObject<HTMLInputElement | null>;
   params: SearchParams;
@@ -49,25 +50,23 @@ export function SearchControls(props: {
   const { params, settings } = props;
   return (
     <header className="controls">
-      <div className="row">
-        <div className="search-field">
-          <SearchIcon />
-          <input
-            ref={props.inputRef}
-            className="search"
-            type="search"
-            placeholder="Search artist, title, mapper or tags…"
-            value={params.text}
-            onChange={(e) => props.onChange({ text: e.currentTarget.value })}
-            spellCheck={false}
-            autoComplete="off"
-          />
-        </div>
-        <button className="close" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
-          ✕
+      <div className="search-field">
+        <SearchIcon />
+        <input
+          ref={props.inputRef}
+          className="search"
+          type="search"
+          placeholder="Search maps"
+          value={params.text}
+          onChange={(e) => props.onChange({ text: e.currentTarget.value })}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <button className="esc" onClick={props.onClose} aria-label="Close" title="Close (Esc)">
+          esc
         </button>
       </div>
-      <div className="row filters">
+      <div className="filters">
         <div className="tabs" role="group" aria-label="Game mode">
           {MODES.map(([label, mode]) => (
             <button
@@ -103,22 +102,13 @@ export function SearchControls(props: {
           ))}
         </select>
         <label className="toggle">
+          Hide installed
           <input
             type="checkbox"
             checked={settings?.hideInstalled ?? false}
             disabled={!settings}
             onChange={(e) => props.onSettings({ hideInstalled: e.currentTarget.checked })}
           />
-          Hide installed
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={settings?.noVideo ?? true}
-            disabled={!settings}
-            onChange={(e) => props.onSettings({ noVideo: e.currentTarget.checked })}
-          />
-          No video
         </label>
       </div>
     </header>
