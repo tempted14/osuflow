@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadFraction, downloadLabel, formatLength, longestLength, setLabel, starRange } from "./format";
+import { downloadFraction, downloadLabel, formatLength, friendlyError, longestLength, setLabel, starRange } from "./format";
 import { hotkeyFromEvent } from "./hotkey";
 import { autoHideMs, browserName, linkMode, toastLine, toastProgress } from "./links";
 import {
@@ -49,6 +49,13 @@ describe("format", () => {
     expect(formatLength(61.6)).toBe("1:02");
     expect(formatLength(3600)).toBe("60:00");
     expect(formatLength(-5)).toBe("0:00");
+  });
+
+  it("turns a failed search into a sentence a person can act on", () => {
+    expect(friendlyError("every mirror failed: catboy.best: timed out; osu.direct: HTTP 503")).toBe(
+      "Couldn't reach the beatmap mirrors. Check your connection and try again.",
+    );
+    expect(friendlyError("something else broke")).toBe("Couldn't load maps.");
   });
 
   it("labels a set by its artist and title", () => {

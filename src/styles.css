@@ -512,12 +512,19 @@ input[type="checkbox"]:focus-visible {
   opacity: 0.85;
 }
 
-/* The one part of the card that grows and scrolls; the controls keep their size. */
+/* Keys for the selected card: a hint, not a warning. */
+.hint.keys {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* The one part of the card that grows and scrolls; the controls keep their size. The room at the bottom
+   lets the last row scroll clear of the floating downloads pill. */
 .results {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 20px 24px;
+  padding: 8px 20px 60px;
 }
 
 .grid {
@@ -992,6 +999,11 @@ html[data-glass="off"] .dl-panel {
   font-size: 1.15rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .hero .quiet {

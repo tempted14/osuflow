@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Beatmapset, DownloadJob } from "../lib/types";
+import { friendlyError } from "../lib/format";
 import { BeatmapCard } from "./BeatmapCard";
 
 const MIN_CARD_WIDTH = 280;
@@ -88,7 +89,7 @@ export function ResultsGrid(props: Props) {
     >
       {props.error && (
         <div className="notice error">
-          <span>Couldn't load maps: {props.error}</span>
+          <span title={props.error}>{friendlyError(props.error)}</span>
           <button onClick={props.onRetry}>Try again</button>
         </div>
       )}

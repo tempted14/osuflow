@@ -21,7 +21,14 @@ the browser registration, if you turned either on.
 ## Using it
 
 - **Search:** press `Ctrl+Shift+D` in osu!. A frosted-glass card opens over the game with your
-  search. Type to search, arrow keys to move, `Enter` to download, `Space` to preview, `Esc` to close.
+  search. Type to search (or paste an osu! beatmap link or ID to jump straight to that map), arrow
+  keys to move, `Enter` to download, `Space` to preview, `Esc` to close.
+- **Sort and filter:** pick a game mode and status, then one of ten sort orders (ranked date, last
+  updated, submitted, plays, favourites, stars, BPM, length, title, artist). The button beside the
+  menu says which way it runs ("Newest first", "Hardest first", "A to Z") and reverses it. The *Stars*
+  menu keeps maps with a difficulty in an osu! band, Easy to Expert+. The beatmap mirrors can't filter by
+  stars themselves, so that filter works on the results already fetched; for a rare band osu!flow fetches
+  a few more pages and then offers *Keep searching*.
 - **Background:** osu!flow lives in the system tray. Closing the settings window leaves it running;
   the tray menu has *Search maps*, *Settings*, *Start with Windows* and *Quit*. With *Start with
   Windows* on, it starts quietly at login and shows no window.

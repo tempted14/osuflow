@@ -222,6 +222,7 @@ export default function Overlay() {
       ) : (
         tip && <p className="hint">{tip}</p>
       )}
+      {selected >= 0 && <p className="hint keys">Enter to download · Space to preview</p>}
       <ResultsGrid
         // Prefetched results wait as data. Mounted while hidden, thirty cards would keep layout
         // and compositor layers alive (measured: about 12 MB) for a window nobody can see.

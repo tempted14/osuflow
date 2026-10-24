@@ -91,6 +91,7 @@ export default function Home() {
       <header className="hero">
         <Logo size={30} />
         <h1>osu!flow</h1>
+        <span className="version">{__APP_VERSION__}</span>
         <button className="quiet" onClick={() => void api.toggleOverlay()}>
           Open search
         </button>

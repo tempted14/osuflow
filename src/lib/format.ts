@@ -15,6 +15,13 @@ export function longestLength(set: Pick<Beatmapset, "beatmaps">): number {
   return set.beatmaps.reduce((longest, map) => Math.max(longest, map.total_length), 0);
 }
 
+/** What to tell the user when a search fails; the mirror's own message stays available as a tooltip. */
+export function friendlyError(error: string): string {
+  return error.includes("every mirror failed")
+    ? "Couldn't reach the beatmap mirrors. Check your connection and try again."
+    : "Couldn't load maps.";
+}
+
 /** "2.1–6.4" for a set with several difficulties, "4.3" for one, null for none. */
 export function starRange(set: Pick<Beatmapset, "beatmaps">): string | null {
   if (set.beatmaps.length === 0) return null;
