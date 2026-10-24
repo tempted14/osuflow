@@ -21,7 +21,7 @@
         "minHeight": 340,
         "center": true,
         "transparent": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --renderer-process-limit=1"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=NetworkServiceInProcess2 --renderer-process-limit=1"
       },
       {
         "label": "overlay",
@@ -37,7 +37,7 @@
         "resizable": false,
         "shadow": true,
         "focus": false,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --renderer-process-limit=1"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=NetworkServiceInProcess2 --renderer-process-limit=1"
       },
       {
         "label": "toast",
@@ -54,7 +54,7 @@
         "shadow": true,
         "focus": false,
         "focusable": false,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --renderer-process-limit=1"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=NetworkServiceInProcess2 --renderer-process-limit=1"
       }
     ],
     "security": {
