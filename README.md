@@ -11,8 +11,8 @@ background app for Windows 11.
 
 1. Download **osu.flow_x.y.z_x64-setup.exe** from the [Releases](../../releases) page.
 2. Run it. It installs for your user only (no administrator rights) and adds a Start menu entry.
-   The installer isn't code-signed, so Windows SmartScreen may say it protects your PC: choose
-   **More info**, then **Run anyway**.
+   While osu!flow is new, Windows SmartScreen may say it protects your PC: choose **More info**,
+   then **Run anyway**. See the [code signing policy](#code-signing-policy) below.
 3. osu!flow opens its settings window and then waits in the tray. Press `Ctrl+Shift+D` in osu!.
 
 To remove it, use Windows' *Installed apps*. That also removes the *Start with Windows* entry and
@@ -30,6 +30,23 @@ the browser registration, if you turned either on.
   Windows' Default apps (Windows doesn't let an app do that last step itself). Every other link
   still goes to your usual browser.
 - **Settings:** the shortcut, *Skip videos*, *Start with Windows* and the link handler.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+- **Authors, reviewers and approvers:** [tempted14](https://github.com/tempted14), the only maintainer.
+- Only installers built by this repository's [release workflow](.github/workflows/release.yml) from
+  the source in this repository are signed, and every release is approved by hand before it is signed.
+  Releases that are signed say so in their notes.
+
+## Privacy
+
+osu!flow collects nothing and has no telemetry. It contacts the beatmap mirrors (osu.direct and
+catboy.best) to search for and download the maps you ask for, and osu!'s own servers (assets.ppy.sh and
+b.ppy.sh) for cover images and previews. This program will not transfer any information to other
+networked systems unless specifically requested by the user or the person installing or operating it.
 
 ## How it is built
 
