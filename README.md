@@ -9,7 +9,7 @@ background app for Windows 11.
 
 ## Install
 
-1. Download **osu!flow_x.y.z_x64-setup.exe** from the [Releases](../../releases) page.
+1. Download **osu.flow_x.y.z_x64-setup.exe** from the [Releases](../../releases) page.
 2. Run it. It installs for your user only (no administrator rights) and adds a Start menu entry.
    The installer isn't code-signed, so Windows SmartScreen may say it protects your PC: choose
    **More info**, then **Run anyway**.
