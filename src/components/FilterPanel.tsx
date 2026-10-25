@@ -20,6 +20,9 @@ function Row(props: { label: string; children: ReactNode }) {
   );
 }
 
+/** What can also be typed in the search box (the osu! website's and osu!lazer's syntax), to click and edit. */
+const EXAMPLES = ["stars>5", "ar>=9", "od<8", "bpm=180..200", "length<3m", "keys=4", "mapper="];
+
 /**
  * The osu! website's filter list, in its order and its words. What needs an osu! account (rank achieved,
  * played, favourites, subscribed mappers) can't exist here. Every filter works on the results already
@@ -30,6 +33,7 @@ export function FilterPanel(props: {
   settings: Settings | null;
   onFilters: (patch: Partial<ClientFilters>) => void;
   onSettings: (patch: Partial<Settings>) => void;
+  onExample: (word: string) => void;
 }) {
   const { filters, settings, onFilters } = props;
   return (
@@ -93,6 +97,13 @@ export function FilterPanel(props: {
         <Chip on={filters.showExplicit} onClick={() => onFilters({ showExplicit: true })}>
           Show
         </Chip>
+      </Row>
+      <Row label="Type in the box">
+        {EXAMPLES.map((example) => (
+          <button key={example} className="chip example" title="Add to the search" onClick={() => props.onExample(example)}>
+            {example}
+          </button>
+        ))}
       </Row>
       {activeFilterCount(filters) > 0 && (
         <button className="link reset" onClick={() => onFilters(NO_FILTERS)}>

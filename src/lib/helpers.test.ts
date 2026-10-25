@@ -20,6 +20,7 @@ import {
   GENRES,
   LANGUAGES,
   NO_FILTERS,
+  PageCache,
   STATUSES,
   activeFilterCount,
   applyLibraryDelta,
@@ -598,5 +599,46 @@ describe("link toast", () => {
     expect(browserName("D:\\Tools\\Zen\\zen.exe")).toBe("zen");
     expect(browserName(".exe")).toBe("your usual browser");
     expect(browserName(null)).toBe("your usual browser");
+  });
+});
+
+describe("the cache of recent searches", () => {
+  const page = (at: number, ids: number[] = [1]) => ({
+    results: ids.map((id) => set(id)),
+    hasMore: true,
+    mirror: null,
+    sortApplied: true,
+    at,
+  });
+
+  it("hands back a page it was given, until it is as old as the backend's own cache", () => {
+    const cache = new PageCache();
+    cache.set("a", page(1000));
+    expect(cache.get("a", 1000 + FRESH_FOR_MS - 1)?.results[0].id).toBe(1);
+    expect(cache.get("a", 1000 + FRESH_FOR_MS)).toBeNull();
+    // An expired page is dropped, not kept around.
+    expect(cache.get("a", 1000)).toBeNull();
+  });
+
+  it("knows nothing about a search it hasn't seen", () => {
+    expect(new PageCache().get("never", 0)).toBeNull();
+  });
+
+  it("keeps the most recently used searches when it is full", () => {
+    const cache = new PageCache(2);
+    cache.set("a", page(0));
+    cache.set("b", page(0));
+    cache.get("a", 1); // "a" is used again, so "b" is now the oldest
+    cache.set("c", page(0));
+    expect(cache.get("a", 1)).not.toBeNull();
+    expect(cache.get("b", 1)).toBeNull();
+    expect(cache.get("c", 1)).not.toBeNull();
+  });
+
+  it("replaces a search's page when it is fetched again", () => {
+    const cache = new PageCache(2);
+    cache.set("a", page(0, [1]));
+    cache.set("a", page(5, [2, 3]));
+    expect(cache.get("a", 6)?.results.map((s) => s.id)).toEqual([2, 3]);
   });
 });

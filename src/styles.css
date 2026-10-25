@@ -40,7 +40,7 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 120ms;
   --medium: 200ms;
-  --slow: 320ms;
+  --slow: 240ms;
 
   font-family: var(--font);
   font-size: 13.5px;
@@ -297,8 +297,8 @@ input[type="checkbox"]:focus-visible {
   opacity: 0;
   transform: translateY(8px) scale(0.99);
   transition:
-    opacity var(--medium) var(--ease),
-    transform var(--slow) var(--ease);
+    opacity var(--fast) var(--ease),
+    transform var(--medium) var(--ease);
 }
 
 .panel.visible {
@@ -560,6 +560,46 @@ input[type="checkbox"]:focus-visible {
   margin-left: 120px;
 }
 
+/* Examples of what can be typed in the search box: set in code type, since they are code to type. */
+.chip.example {
+  font-family: var(--mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 0.84rem;
+}
+
+/* What the search box understood from the text typed in it ("stars > 5"), one click to take back out. */
+.conditions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px 3px 11px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.cond svg {
+  color: var(--muted);
+  transition: color var(--fast) var(--ease);
+}
+
+.cond:hover svg {
+  color: var(--text);
+}
+
+.cond-note {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 /* Marks on a cover: a Featured Artist song and a map with a video. */
 .badges {
   position: absolute;
@@ -718,8 +758,8 @@ input[type="checkbox"]:focus-visible {
   background: var(--surface);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
-  animation: rise var(--slow) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 24ms);
+  animation: rise var(--medium) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 16ms);
   transition:
     transform var(--medium) var(--ease),
     background var(--medium) var(--ease),
@@ -940,8 +980,8 @@ button.action.busy:hover:not(:disabled) {
 /* Placeholder cards while the first results load. The sweep is a compositor-only transform. */
 .card.ghost {
   min-height: 210px;
-  animation: rise var(--slow) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 60ms);
+  animation: rise var(--medium) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
 .card.ghost::after {

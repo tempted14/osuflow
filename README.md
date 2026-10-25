@@ -35,6 +35,13 @@ the browser registration, if you turned either on.
   combination osu!flow fetches a few more pages and then offers *Keep searching*. What needs an osu!
   account (rank achieved, played, favourites, subscribed mappers, recommended difficulty) isn't possible
   here.
+- **Search conditions:** the osu! website's and osu!lazer's search syntax works in the search box:
+  `stars>5`, `ar<=9.5`, `cs`, `od`, `hp`, `bpm=180..200`, `length<3m` (seconds, `m`, `h` or `3:30`),
+  `keys=4` for mania, and `mapper=name`, `artist=name` or `title=name` (quote names with spaces). `>`,
+  `>=`, `<`, `<=` compare, `=` matches about that value, `a..b` is a range. Several conditions must all
+  hold on the *same* difficulty, as in the game. They show as chips under the box (click one to remove
+  it), only the other words go to the mirror, and editing a condition narrows the results at once
+  without a new search. The Filters panel has examples to click.
 - **Background:** osu!flow lives in the system tray. Closing the settings window leaves it running;
   the tray menu has *Search maps*, *Settings*, *Start with Windows* and *Quit*. With *Start with
   Windows* on, it starts quietly at login and shows no window.

@@ -151,7 +151,9 @@ impl Default for Timing {
     fn default() -> Self {
         Self {
             unlock_timeout: Duration::from_secs(10),
-            unlock_poll: Duration::from_millis(100),
+            // A virus scanner often holds a file for a moment after it is written; this is how late the
+            // hand-off notices it let go, so it is checked often (a failed open costs next to nothing).
+            unlock_poll: Duration::from_millis(25),
             recheck_delay: Duration::from_millis(500),
             verify_running: Duration::from_secs(30),
             verify_cold_start: Duration::from_secs(90),

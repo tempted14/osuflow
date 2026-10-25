@@ -14,6 +14,7 @@ import { setLabel } from "../lib/format";
 import { isNavKey, moveSelection } from "../lib/nav";
 import { loadPrefs, savePrefs } from "../lib/prefs";
 import type { Layout } from "../lib/prefs";
+import { parseQuery } from "../lib/query";
 import { FILTER_WANT, NO_FILTERS, activeFilterCount, keepPaging, narrowsResults, visibleResults } from "../lib/results";
 import type { ClientFilters } from "../lib/results";
 import type { Beatmapset, OverlayContext } from "../lib/types";
@@ -60,7 +61,10 @@ export default function Overlay() {
   const { installed, refresh: refreshInstalled } = useInstalled();
   const { jobs, jobFor, start: startDownload, cancel, dismiss, clearFinished } = useDownloads();
   const { playingId, toggle: togglePreview, stop: stopPreview } = usePreview();
-  const search = useSearch(params, visible);
+  // Typed conditions like `stars>5` are applied here, on what the mirrors sent; the mirrors only get the
+  // rest of the words, so editing a condition never starts a new search.
+  const query = useMemo(() => parseQuery(params.text), [params.text]);
+  const search = useSearch({ ...params, text: query.text }, visible);
 
   // The images come straight back from the HTTP cache the next time the overlay is shown. They
   // start out released too: the first results are fetched at start-up, while the overlay is
@@ -77,8 +81,8 @@ export default function Overlay() {
 
   const keep = useMemo(() => new Set(jobs.map((job) => job.setId)), [jobs]);
   const sets = useMemo(
-    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep, filters, params.mode),
-    [search.results, installed, settings?.hideInstalled, keep, filters, params.mode],
+    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep, filters, params.mode, query),
+    [search.results, installed, settings?.hideInstalled, keep, filters, params.mode, query],
   );
 
   useEffect(() => {
@@ -136,17 +140,23 @@ export default function Overlay() {
 
   const preview = useCallback((set: Beatmapset) => togglePreview(set.id, set.preview_url), [togglePreview]);
 
+  // A search-tip example from the Filters panel is added to what is typed, ready to be edited.
+  const addToSearch = useCallback((word: string) => {
+    setParams((current) => ({ ...current, text: current.text.trim() ? `${current.text.trimEnd()} ${word}` : word }));
+    setSelected(-1);
+    inputRef.current?.focus();
+  }, []);
+
   // The filters run here on what the mirrors sent, so a rare one can leave the grid nearly empty. More pages
   // are fetched for it, but only a few at a time; "Keep searching" asks for a few more.
   const pagesTried = useRef(0);
   const [capped, setCapped] = useState(false);
-  const signature = [params.text, params.mode, params.status, params.sort, params.dir, JSON.stringify(filters)].join("|");
-  useEffect(() => {
+  const signature = [params.text, params.mode, params.status, params.sort, params.dir, JSON.stringify(filters)].join("|");  useEffect(() => {
     pagesTried.current = 0;
     setCapped(false);
   }, [signature]);
 
-  const narrowing = narrowsResults(filters);
+  const narrowing = narrowsResults(filters, query);
   const sparse = narrowing && sets.length < FILTER_WANT;
   const { loadMore: fetchMore, loading: fetching } = search;
   const loadMore = useCallback(() => {
@@ -170,7 +180,7 @@ export default function Overlay() {
     <div className="notice empty">
       <strong>No maps found</strong>
       <span>
-        {narrowing ? "Try loosening a filter." : params.text ? "Try fewer or different words." : "Try another category."}
+        {narrowing ? "Try loosening a filter." : query.text ? "Try fewer or different words." : "Try another category."}
       </span>
       {filtersOn && (
         <button
@@ -234,6 +244,7 @@ export default function Overlay() {
       <SearchControls
         inputRef={inputRef}
         params={params}
+        query={query}
         settings={settings}
         filters={filters}
         layout={layout}
@@ -243,6 +254,7 @@ export default function Overlay() {
         onFilters={changeFilters}
         onLayout={setLayout}
         onPanel={setPanelOpen}
+        onExample={addToSearch}
         onClose={hide}
       />
       <div className={`loadbar${search.loading ? " on" : ""}`} aria-hidden />

@@ -1,4 +1,6 @@
-import type { Beatmapset, LibraryDelta } from "./types";
+import { NO_QUERY, fieldsMatch, mapMatches, queryNarrows } from "./query";
+import type { NumericConstraint, ParsedQuery } from "./query";
+import type { Beatmapset, LibraryDelta, Mirror } from "./types";
 
 /** Appends a page of results, skipping sets that are already listed (mirrors can repeat them). */
 export function mergeResults(existing: Beatmapset[], incoming: Beatmapset[]): Beatmapset[] {
@@ -97,23 +99,42 @@ export function activeFilterCount(filters: ClientFilters): number {
   return (Object.keys(NO_FILTERS) as (keyof ClientFilters)[]).filter((key) => filters[key] !== NO_FILTERS[key]).length;
 }
 
-/** True when a filter can leave few matches on a page. Showing explicit maps doesn't narrow anything. */
-export function narrowsResults(filters: ClientFilters): boolean {
-  return activeFilterCount({ ...filters, showExplicit: NO_FILTERS.showExplicit }) > 0;
+/**
+ * True when a filter, or a typed one like `stars>5`, can leave few matches on a page. Showing
+ * explicit maps doesn't narrow anything.
+ */
+export function narrowsResults(filters: ClientFilters, query: ParsedQuery = NO_QUERY): boolean {
+  return activeFilterCount({ ...filters, showExplicit: NO_FILTERS.showExplicit }) > 0 || queryNarrows(query);
 }
 
-/** True when the set has a difficulty in the tier (counting only the chosen mode's, if a mode is chosen). */
-export function hasDifficultyIn(set: Pick<Beatmapset, "beatmaps">, tier: Tier, mode: number | null): boolean {
+/**
+ * True when the set has one difficulty in the tier that also meets every typed numeric filter (counting
+ * only the chosen mode's, if a mode is chosen). It must be the same difficulty, as in the game.
+ */
+export function hasDifficultyIn(
+  set: Pick<Beatmapset, "beatmaps">,
+  tier: Tier,
+  mode: number | null,
+  constraints: readonly NumericConstraint[] = [],
+): boolean {
   const range = TIERS.find((candidate) => candidate.value === tier);
-  if (!range || tier === "any") return true;
+  if (!range || (tier === "any" && constraints.length === 0)) return true;
   return set.beatmaps.some(
     (map) =>
-      (mode === null || map.mode_int === mode) && map.difficulty_rating >= range.min && map.difficulty_rating < range.max,
+      (mode === null || map.mode_int === mode) &&
+      map.difficulty_rating >= range.min &&
+      map.difficulty_rating < range.max &&
+      mapMatches(map, constraints),
   );
 }
 
 /** Whether one set passes every filter. A set the mirror gave no genre or language for fails those two filters. */
-export function matchesFilters(set: Beatmapset, filters: ClientFilters, mode: number | null): boolean {
+export function matchesFilters(
+  set: Beatmapset,
+  filters: ClientFilters,
+  mode: number | null,
+  query: ParsedQuery = NO_QUERY,
+): boolean {
   if (!filters.showExplicit && set.nsfw) return false;
   if (filters.genre !== null && set.genre_id !== filters.genre) return false;
   if (filters.language !== null && set.language_id !== filters.language) return false;
@@ -121,7 +142,8 @@ export function matchesFilters(set: Beatmapset, filters: ClientFilters, mode: nu
   if (filters.storyboard && !set.storyboard) return false;
   if (filters.featured && !set.track_id) return false;
   if (filters.spotlight && !set.spotlight) return false;
-  return hasDifficultyIn(set, filters.tier, mode);
+  if (!fieldsMatch(set, query.fields)) return false;
+  return hasDifficultyIn(set, filters.tier, mode, query.numeric);
 }
 
 /**
@@ -137,9 +159,10 @@ export function visibleResults(
   keep: ReadonlySet<number>,
   filters: ClientFilters = NO_FILTERS,
   mode: number | null = null,
+  query: ParsedQuery = NO_QUERY,
 ): Beatmapset[] {
   return results.filter(
-    (set) => matchesFilters(set, filters, mode) && (!hideInstalled || !installed.has(set.id) || keep.has(set.id)),
+    (set) => matchesFilters(set, filters, mode, query) && (!hideInstalled || !installed.has(set.id) || keep.has(set.id)),
   );
 }
 
@@ -177,6 +200,51 @@ export function searchKey(params: {
   // Relevance has no direction, so flipping it must not count as a new search.
   const dir = params.sort === "relevance" ? null : (params.dir ?? null);
   return JSON.stringify([params.text.trim().toLowerCase(), params.mode, params.status, params.sort, dir]);
+}
+
+/** A first page of results as the search handed it over. */
+export interface CachedPage {
+  results: Beatmapset[];
+  hasMore: boolean;
+  mirror: Mirror | null;
+  sortApplied: boolean;
+  /** When it was fetched (monotonic, like `FetchRecord.at`), which is what decides whether it is still fresh. */
+  at: number;
+}
+
+/**
+ * The first pages of the last few searches, so going back to one (backspacing a letter, switching
+ * category and back) shows it at once instead of waiting on the network. A page expires when the
+ * backend's own cache would, so a repeat can never show something the mirror wouldn't say now.
+ */
+export class PageCache {
+  private readonly pages = new Map<string, CachedPage>();
+  private readonly capacity: number;
+  private readonly freshForMs: number;
+
+  constructor(capacity = 12, freshForMs = FRESH_FOR_MS) {
+    this.capacity = capacity;
+    this.freshForMs = freshForMs;
+  }
+
+  get(key: string, now: number): CachedPage | null {
+    const page = this.pages.get(key);
+    if (!page) return null;
+    this.pages.delete(key);
+    if (now - page.at >= this.freshForMs) return null;
+    // Put back last, so the map stays ordered from least to most recently used.
+    this.pages.set(key, page);
+    return page;
+  }
+
+  set(key: string, page: CachedPage): void {
+    this.pages.delete(key);
+    this.pages.set(key, page);
+    for (const oldest of this.pages.keys()) {
+      if (this.pages.size <= this.capacity) break;
+      this.pages.delete(oldest);
+    }
+  }
 }
 
 export type FetchPlan = "skip" | "now" | "debounced";

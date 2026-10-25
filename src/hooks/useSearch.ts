@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import { mergeResults, parseBeatmapReference, planFetch, searchKey } from "../lib/results";
+import { PageCache, mergeResults, parseBeatmapReference, planFetch, searchKey } from "../lib/results";
 import type { FetchRecord } from "../lib/results";
 import type { Beatmapset, Mirror, Sort, SortDirection } from "../lib/types";
 
@@ -31,7 +31,8 @@ async function findByReference(text: string): Promise<Beatmapset | null> {
 }
 
 const PAGE_SIZE = 30;
-const TYPING_DEBOUNCE_MS = 300;
+/** How long typing must pause before a search is sent: short enough to feel live, long enough to skip keystrokes in a burst. */
+const TYPING_DEBOUNCE_MS = 200;
 
 interface State {
   results: Beatmapset[];
@@ -76,6 +77,8 @@ export function useSearch(params: SearchParams, enabled: boolean) {
   const lastFetch = useRef<FetchRecord | null>(null);
   /** The query whose first page is on its way, so opening the overlay doesn't restart it. */
   const inFlight = useRef<string | null>(null);
+  /** Recent first pages, so returning to a search already made shows it with no wait. */
+  const [pages] = useState(() => new PageCache());
   const key = searchKey({ text: params.text, mode: params.mode, status: params.status, sort: params.sort, dir: params.dir });
 
   const fetchPage = useCallback(
@@ -94,6 +97,11 @@ export function useSearch(params: SearchParams, enabled: boolean) {
               offset,
               limit: PAGE_SIZE,
             });
+        // Kept even when the person has typed on since: backspacing to this search is then instant.
+        if (offset === 0) {
+          const { results, hasMore, mirror, sortApplied } = response;
+          pages.set(key, { results, hasMore, mirror, sortApplied, at: performance.now() });
+        }
         if (forGeneration !== generation.current) return;
         if (offset === 0) {
           lastFetch.current = { key, at: performance.now() };
@@ -115,7 +123,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
         setState((current) => ({ ...current, loading: false, error: String(error), failedOffset: offset }));
       }
     },
-    [params.text, params.mode, params.status, params.sort, params.dir, key],
+    [params.text, params.mode, params.status, params.sort, params.dir, key, pages],
   );
 
   // A new query, the overlay opening, or the app starting: fetch the first page when it is
@@ -133,6 +141,24 @@ export function useSearch(params: SearchParams, enabled: boolean) {
       hadError: latest.current.error !== null,
     });
     if (plan === "skip") return;
+    const remembered = pages.get(key, performance.now());
+    if (remembered) {
+      // Asked before, a moment ago: show it now, and let anything still on its way fall away.
+      generation.current += 1;
+      inFlight.current = null;
+      lastFetch.current = { key, at: remembered.at };
+      setState({
+        results: remembered.results,
+        fetched: remembered.results.length,
+        hasMore: remembered.hasMore,
+        loading: false,
+        error: null,
+        failedOffset: 0,
+        mirror: remembered.mirror,
+        sortApplied: remembered.sortApplied,
+      });
+      return;
+    }
     const forGeneration = ++generation.current;
     inFlight.current = key;
     setState((current) => ({ ...current, loading: true, error: null }));
@@ -150,7 +176,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
       // this effect while the first search is still on its way, and that one must be left alone.
       if (!sent && inFlight.current === key && forGeneration === generation.current) inFlight.current = null;
     };
-  }, [enabled, fetchPage, key, params.text]);
+  }, [enabled, fetchPage, key, params.text, pages]);
 
   const loadMore = useCallback(() => {
     const current = latest.current;

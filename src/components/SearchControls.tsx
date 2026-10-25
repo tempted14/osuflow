@@ -1,6 +1,8 @@
 import type { ReactNode, RefObject } from "react";
 import type { SearchParams } from "../hooks/useSearch";
 import type { Layout } from "../lib/prefs";
+import { withoutChip } from "../lib/query";
+import type { ParsedQuery } from "../lib/query";
 import { STATUSES, activeFilterCount } from "../lib/results";
 import type { ClientFilters } from "../lib/results";
 import { SORTS, defaultDirection, directionWords, reverse } from "../lib/sorting";
@@ -42,6 +44,8 @@ function Icon(props: { children: ReactNode; size?: number; rotate?: number }) {
 export function SearchControls(props: {
   inputRef: RefObject<HTMLInputElement | null>;
   params: SearchParams;
+  /** What the typed text was understood as: its conditions are shown under the box. */
+  query: ParsedQuery;
   settings: Settings | null;
   filters: ClientFilters;
   layout: Layout;
@@ -51,6 +55,8 @@ export function SearchControls(props: {
   onFilters: (patch: Partial<ClientFilters>) => void;
   onLayout: (layout: Layout) => void;
   onPanel: (open: boolean) => void;
+  /** Adds a word of search syntax to what is typed. */
+  onExample: (word: string) => void;
   onClose: () => void;
 }) {
   const { params, settings, filters } = props;
@@ -92,6 +98,32 @@ export function SearchControls(props: {
           esc
         </button>
       </div>
+      {(props.query.chips.length > 0 || props.query.ignored.length > 0) && (
+        <div className="conditions" role="group" aria-label="Search conditions">
+          {props.query.chips.map((chip) => (
+            <button
+              key={`${chip.start}:${chip.label}`}
+              className="cond"
+              title="Remove this condition"
+              aria-label={`Remove ${chip.label}`}
+              onClick={() => {
+                props.onChange({ text: withoutChip(params.text, chip) });
+                props.inputRef.current?.focus();
+              }}
+            >
+              {chip.label}
+              <Icon size={10}>
+                <path d="m6 6 12 12M18 6 6 18" />
+              </Icon>
+            </button>
+          ))}
+          {props.query.ignored.map((word) => (
+            <span key={word} className="cond-note">
+              Can't read {word}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="filters">
         <div className="tabs" role="group" aria-label="Game mode">
           {MODES.map(([label, mode]) => (
@@ -182,7 +214,13 @@ export function SearchControls(props: {
         </button>
       </div>
       {props.panelOpen && (
-        <FilterPanel filters={filters} settings={settings} onFilters={props.onFilters} onSettings={props.onSettings} />
+        <FilterPanel
+          filters={filters}
+          settings={settings}
+          onFilters={props.onFilters}
+          onSettings={props.onSettings}
+          onExample={props.onExample}
+        />
       )}
     </header>
   );

@@ -127,8 +127,9 @@ export function BeatmapCard(props: {
       className={classes.filter(Boolean).join(" ")}
       data-index={props.index}
       aria-selected={props.selected}
-      // Cards fade up one after another; the delay is capped so a long page doesn't crawl in.
-      style={{ "--i": Math.min(props.index, 14) } as CSSProperties}
+      // Cards fade up one after another; the delay is capped (to about a tenth of a second) so a long
+      // page, or the next page of a scroll, shows at once instead of crawling in.
+      style={{ "--i": Math.min(props.index, 8) } as CSSProperties}
       onMouseDown={props.onSelect}
     >
       <div className="cover">
