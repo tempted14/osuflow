@@ -1,6 +1,6 @@
 [package]
 name = "osuflow"
-version = "0.1.2"
+version = "0.2.0"
 description = "osu!direct-style beatmap search and download overlay for osu! stable"
 authors = ["osu!flow contributors"]
 license = "MIT"
