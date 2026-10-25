@@ -2,11 +2,12 @@ import type { CSSProperties, ReactNode } from "react";
 import { downloadFraction, downloadLabel, formatLength, longestLength, starRange } from "../lib/format";
 import { isBusy } from "../lib/jobs";
 import { starColor } from "../lib/starColor";
+import type { Layout } from "../lib/prefs";
 import type { Beatmap, Beatmapset, DownloadJob } from "../lib/types";
 
 const MAX_DOTS = 6;
 
-type IconName = "download" | "check" | "retry" | "close" | "play" | "pause";
+type IconName = "download" | "check" | "retry" | "close" | "play" | "pause" | "film";
 
 const ICONS: Record<IconName, ReactNode> = {
   download: <path d="M12 4.5v10m0 0-4-4m4 4 4-4M5.5 19h13" />,
@@ -15,6 +16,7 @@ const ICONS: Record<IconName, ReactNode> = {
   close: <path d="m7 7 10 10M17 7 7 17" />,
   play: <path d="M8.5 5.8v12.4L18.5 12z" fill="currentColor" stroke="none" />,
   pause: <path d="M8 6h3v12H8zM13 6h3v12h-3z" fill="currentColor" stroke="none" />,
+  film: <path d="M4 5h16v14H4zM8 5v14M16 5v14M4 9.5h4M16 9.5h4M4 14.5h4M16 14.5h4" />,
 };
 
 function Icon({ name }: { name: IconName }) {
@@ -105,16 +107,19 @@ export function BeatmapCard(props: {
   playing: boolean;
   /** Leave the cover image out, so it isn't held decoded while the overlay is hidden. */
   releaseCover?: boolean;
+  /** List rows show a small square cover; cards show a wide strip. */
+  layout: Layout;
   onDownload: () => void;
   onCancel: () => void;
   onPreview: () => void;
   onSelect: () => void;
 }) {
   const { set } = props;
-  // The cover strip is 400x140, which is plenty on ordinary screens and a quarter of the memory of the 2x file
-  // once decoded. Only dense screens (above 1.5x) get the sharper one.
+  // A list row shows a small square cover (150x150) and a card a wide strip (400x140): each is plenty on an
+  // ordinary screen and far lighter than its 2x file. Only dense screens (above 1.5x) get the sharper one.
   const sharp = window.devicePixelRatio > 1.5;
-  const cover = (sharp ? set.covers["card@2x"] : set.covers.card) || set.covers["card@2x"] || set.covers.card;
+  const [small, big] = props.layout === "list" ? (["list", "list@2x"] as const) : (["card", "card@2x"] as const);
+  const cover = (sharp ? set.covers[big] : set.covers[small]) || set.covers[big] || set.covers[small];
   const stars = starRange(set);
   const classes = ["card", props.selected && "selected", props.installed && "installed"];
   return (
@@ -128,6 +133,20 @@ export function BeatmapCard(props: {
     >
       <div className="cover">
         {cover && !props.releaseCover && <img src={cover} alt="" loading="lazy" decoding="async" draggable={false} />}
+        {(set.track_id || set.video) && (
+          <div className="badges">
+            {set.track_id ? (
+              <span className="badge" title="Featured Artist">
+                Featured
+              </span>
+            ) : null}
+            {set.video && (
+              <span className="badge icon" title="Has a video" role="img" aria-label="Has a video">
+                <Icon name="film" />
+              </span>
+            )}
+          </div>
+        )}
         <button
           className={`play${props.playing ? " on" : ""}`}
           onClick={props.onPreview}

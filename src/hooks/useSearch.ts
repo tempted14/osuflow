@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { mergeResults, parseBeatmapReference, planFetch, searchKey } from "../lib/results";
-import type { FetchRecord, Tier } from "../lib/results";
+import type { FetchRecord } from "../lib/results";
 import type { Beatmapset, Mirror, Sort, SortDirection } from "../lib/types";
 
 export interface SearchParams {
@@ -11,8 +11,6 @@ export interface SearchParams {
   status: number;
   sort: Sort;
   dir: SortDirection;
-  /** A star-rating band, applied to the results here (the mirrors can't filter by stars), so it never refetches. */
-  tier: Tier;
 }
 
 /** The set a pasted link or id points at, or null when nothing is found (the text is then searched as words). */

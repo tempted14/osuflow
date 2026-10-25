@@ -1,9 +1,11 @@
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { SearchParams } from "../hooks/useSearch";
-import { TIERS } from "../lib/results";
-import type { Tier } from "../lib/results";
+import type { Layout } from "../lib/prefs";
+import { STATUSES, activeFilterCount } from "../lib/results";
+import type { ClientFilters } from "../lib/results";
 import { SORTS, defaultDirection, directionWords, reverse } from "../lib/sorting";
 import type { Settings, Sort } from "../lib/types";
+import { FilterPanel } from "./FilterPanel";
 
 const MODES: [string, number | null][] = [
   ["All", null],
@@ -13,69 +15,54 @@ const MODES: [string, number | null][] = [
   ["mania", 3],
 ];
 
-const STATUSES: [string, number][] = [
-  ["Ranked", 1],
-  ["Loved", 4],
-  ["Qualified", 3],
-  ["Pending", 0],
-  ["Graveyard", -2],
-];
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function ClearIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
-      <path d="m6 6 12 12M18 6 6 18" />
-    </svg>
-  );
-}
-
-/** Points down for a descending order and up for an ascending one. */
-function ArrowIcon({ down }: { down: boolean }) {
+function Icon(props: { children: ReactNode; size?: number; rotate?: number }) {
+  const size = props.size ?? 14;
   return (
     <svg
-      width="13"
-      height="13"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.4"
+      strokeWidth="2.2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={down ? undefined : { transform: "rotate(180deg)" }}
+      style={props.rotate ? { transform: `rotate(${props.rotate}deg)` } : undefined}
       aria-hidden
     >
-      <path d="M12 5v14m0 0-6-6m6 6 6-6" />
+      {props.children}
     </svg>
   );
 }
 
 /**
- * The search box and one quiet row of filters, each named so nothing has to be guessed. "Esc" doubles
- * as the close button, and the order has a plain-words button ("Newest first") that reverses it.
+ * The search box and the controls that matter every time: game mode, category, sort and its direction,
+ * the layout, and one button for everything else. "Esc" doubles as the close button.
  */
 export function SearchControls(props: {
   inputRef: RefObject<HTMLInputElement | null>;
   params: SearchParams;
   settings: Settings | null;
+  filters: ClientFilters;
+  layout: Layout;
+  panelOpen: boolean;
   onChange: (patch: Partial<SearchParams>) => void;
   onSettings: (patch: Partial<Settings>) => void;
+  onFilters: (patch: Partial<ClientFilters>) => void;
+  onLayout: (layout: Layout) => void;
+  onPanel: (open: boolean) => void;
   onClose: () => void;
 }) {
-  const { params, settings } = props;
+  const { params, settings, filters } = props;
   const words = directionWords(params.sort, params.dir);
+  const active = activeFilterCount(filters) + (settings?.hideInstalled ? 1 : 0);
   return (
     <header className="controls">
       <div className="search-field">
-        <SearchIcon />
+        <Icon size={18}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </Icon>
         <input
           ref={props.inputRef}
           className="search"
@@ -96,7 +83,9 @@ export function SearchControls(props: {
             aria-label="Clear the search"
             title="Clear"
           >
-            <ClearIcon />
+            <Icon size={12}>
+              <path d="m6 6 12 12M18 6 6 18" />
+            </Icon>
           </button>
         )}
         <button className="esc" onClick={props.onClose} aria-label="Close" title="Close (Esc)">
@@ -117,7 +106,7 @@ export function SearchControls(props: {
           ))}
         </div>
         <label className="field">
-          <span>Status</span>
+          <span>Show</span>
           <select value={params.status} onChange={(e) => props.onChange({ status: Number(e.currentTarget.value) })}>
             {STATUSES.map(([label, value]) => (
               <option key={value} value={value}>
@@ -149,30 +138,52 @@ export function SearchControls(props: {
             title="Reverse the order"
             aria-label={`${words}. Reverse the order`}
           >
-            <ArrowIcon down={params.dir === "desc"} />
+            <Icon size={13} rotate={params.dir === "desc" ? 0 : 180}>
+              <path d="M12 5v14m0 0-6-6m6 6 6-6" />
+            </Icon>
             {words}
           </button>
         )}
-        <label className="field">
-          <span>Stars</span>
-          <select value={params.tier} onChange={(e) => props.onChange({ tier: e.currentTarget.value as Tier })}>
-            {TIERS.map((tier) => (
-              <option key={tier.value} value={tier.value}>
-                {tier.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="toggle">
-          Hide installed
-          <input
-            type="checkbox"
-            checked={settings?.hideInstalled ?? false}
-            disabled={!settings}
-            onChange={(e) => props.onSettings({ hideInstalled: e.currentTarget.checked })}
-          />
-        </label>
+        <div className="layout" role="group" aria-label="Layout">
+          <button
+            className={props.layout === "list" ? "on" : ""}
+            aria-pressed={props.layout === "list"}
+            onClick={() => props.onLayout("list")}
+            title="List"
+            aria-label="List layout"
+          >
+            <Icon size={15}>
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </Icon>
+          </button>
+          <button
+            className={props.layout === "cards" ? "on" : ""}
+            aria-pressed={props.layout === "cards"}
+            onClick={() => props.onLayout("cards")}
+            title="Cards"
+            aria-label="Card layout"
+          >
+            <Icon size={15}>
+              <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+            </Icon>
+          </button>
+        </div>
+        <button
+          className={`filters-btn${props.panelOpen ? " on" : ""}`}
+          aria-expanded={props.panelOpen}
+          onClick={() => props.onPanel(!props.panelOpen)}
+          title="Genre, language, difficulty and more"
+        >
+          Filters
+          {active > 0 && <span className="count">{active}</span>}
+          <Icon size={12} rotate={props.panelOpen ? 180 : 0}>
+            <path d="m6 9 6 6 6-6" />
+          </Icon>
+        </button>
       </div>
+      {props.panelOpen && (
+        <FilterPanel filters={filters} settings={settings} onFilters={props.onFilters} onSettings={props.onSettings} />
+      )}
     </header>
   );
 }

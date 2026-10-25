@@ -12,10 +12,12 @@ import type { SearchParams } from "../hooks/useSearch";
 import { useSettings } from "../hooks/useSettings";
 import { setLabel } from "../lib/format";
 import { isNavKey, moveSelection } from "../lib/nav";
-import { FILTER_WANT, keepPaging, visibleResults } from "../lib/results";
+import { loadPrefs, savePrefs } from "../lib/prefs";
+import type { Layout } from "../lib/prefs";
+import { FILTER_WANT, NO_FILTERS, activeFilterCount, keepPaging, narrowsResults, visibleResults } from "../lib/results";
+import type { ClientFilters } from "../lib/results";
 import type { Beatmapset, OverlayContext } from "../lib/types";
 
-const START: SearchParams = { text: "", mode: null, status: 1, sort: "relevance", dir: "desc", tier: "any" };
 const hide = () => void api.hideOverlay();
 /** Hidden this long, the overlay lets go of its cover images: decoded, they are most of its memory. */
 const RELEASE_COVERS_AFTER_MS = 15_000;
@@ -38,7 +40,18 @@ function tipFor(context: OverlayContext | null): string | null {
 export default function Overlay() {
   const [visible, setVisible] = useState(false);
   const [context, setContext] = useState<OverlayContext | null>(null);
-  const [params, setParams] = useState<SearchParams>(START);
+  // How you like to browse is remembered between runs (what you typed is not).
+  const [prefs] = useState(loadPrefs);
+  const [params, setParams] = useState<SearchParams>(() => ({
+    text: "",
+    mode: prefs.mode,
+    status: prefs.status,
+    sort: prefs.sort,
+    dir: prefs.dir,
+  }));
+  const [filters, setFilters] = useState<ClientFilters>(prefs.filters);
+  const [layout, setLayout] = useState<Layout>(prefs.layout);
+  const [panelOpen, setPanelOpen] = useState(prefs.panelOpen);
   const [selected, setSelected] = useState(-1);
   const [columns, setColumns] = useState(3);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,9 +77,13 @@ export default function Overlay() {
 
   const keep = useMemo(() => new Set(jobs.map((job) => job.setId)), [jobs]);
   const sets = useMemo(
-    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep, params.tier, params.mode),
-    [search.results, installed, settings?.hideInstalled, keep, params.tier, params.mode],
+    () => visibleResults(search.results, installed, settings?.hideInstalled ?? false, keep, filters, params.mode),
+    [search.results, installed, settings?.hideInstalled, keep, filters, params.mode],
   );
+
+  useEffect(() => {
+    savePrefs({ mode: params.mode, status: params.status, sort: params.sort, dir: params.dir, filters, layout, panelOpen });
+  }, [params.mode, params.status, params.sort, params.dir, filters, layout, panelOpen]);
 
   const focusSearch = useCallback((selectAll = false) => {
     inputRef.current?.focus();
@@ -112,48 +129,59 @@ export default function Overlay() {
     setSelected(-1);
   }, []);
 
+  const changeFilters = useCallback((patch: Partial<ClientFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setSelected(-1);
+  }, []);
+
   const preview = useCallback((set: Beatmapset) => togglePreview(set.id, set.preview_url), [togglePreview]);
 
-  // The star filter runs here on what the mirrors sent, so a rare band can leave the grid nearly empty.
-  // More pages are fetched for it, but only a few at a time; "Keep searching" asks for a few more.
+  // The filters run here on what the mirrors sent, so a rare one can leave the grid nearly empty. More pages
+  // are fetched for it, but only a few at a time; "Keep searching" asks for a few more.
   const pagesTried = useRef(0);
   const [capped, setCapped] = useState(false);
-  const signature = [params.text, params.mode, params.status, params.sort, params.dir, params.tier].join("|");
+  const signature = [params.text, params.mode, params.status, params.sort, params.dir, JSON.stringify(filters)].join("|");
   useEffect(() => {
     pagesTried.current = 0;
     setCapped(false);
   }, [signature]);
 
-  const sparse = params.tier !== "any" && sets.length < FILTER_WANT;
+  const narrowing = narrowsResults(filters);
+  const sparse = narrowing && sets.length < FILTER_WANT;
   const { loadMore: fetchMore, loading: fetching } = search;
   const loadMore = useCallback(() => {
     // A page already on its way isn't another one: asking again would only use up the allowance.
     if (fetching) return;
-    if (sparse && !keepPaging(params.tier, sets.length, pagesTried.current)) {
+    if (sparse && !keepPaging(narrowing, sets.length, pagesTried.current)) {
       setCapped(true);
       return;
     }
     if (sparse) pagesTried.current += 1;
     fetchMore();
-  }, [fetching, sparse, params.tier, sets.length, fetchMore]);
+  }, [fetching, sparse, narrowing, sets.length, fetchMore]);
   const keepSearching = () => {
     pagesTried.current = 0;
     setCapped(false);
     fetchMore();
   };
 
-  const filtersOn = params.tier !== "any" || params.status !== 1 || params.mode !== null;
+  const filtersOn = activeFilterCount(filters) > 0 || params.status !== 1 || params.mode !== null;
   const empty = (
     <div className="notice empty">
       <strong>No maps found</strong>
       <span>
-        {params.tier !== "any"
-          ? "Try another difficulty."
-          : params.text
-            ? "Try fewer or different words."
-            : "Try another status."}
+        {narrowing ? "Try loosening a filter." : params.text ? "Try fewer or different words." : "Try another category."}
       </span>
-      {filtersOn && <button onClick={() => changeParams({ tier: "any", status: 1, mode: null })}>Reset filters</button>}
+      {filtersOn && (
+        <button
+          onClick={() => {
+            changeParams({ status: 1, mode: null });
+            setFilters(NO_FILTERS);
+          }}
+        >
+          Reset filters
+        </button>
+      )}
     </div>
   );
 
@@ -207,14 +235,20 @@ export default function Overlay() {
         inputRef={inputRef}
         params={params}
         settings={settings}
+        filters={filters}
+        layout={layout}
+        panelOpen={panelOpen}
         onChange={changeParams}
         onSettings={updateSettings}
+        onFilters={changeFilters}
+        onLayout={setLayout}
+        onPanel={setPanelOpen}
         onClose={hide}
       />
       <div className={`loadbar${search.loading ? " on" : ""}`} aria-hidden />
       {capped && sparse && search.hasMore ? (
         <p className="hint">
-          Few maps match this difficulty so far.{" "}
+          Few maps match these filters so far.{" "}
           <button className="link" onClick={keepSearching}>
             Keep searching
           </button>
@@ -235,6 +269,7 @@ export default function Overlay() {
         loading={search.loading}
         error={search.error}
         releaseCovers={coversReleased}
+        layout={layout}
         onColumnsChange={setColumns}
         empty={empty}
         onLoadMore={loadMore}

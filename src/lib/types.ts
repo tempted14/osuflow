@@ -66,6 +66,13 @@ export interface Beatmapset {
   video: boolean;
   storyboard: boolean;
   nsfw: boolean;
+  /** osu!'s genre id (0 if the mirror didn't say). */
+  genre_id: number;
+  /** osu!'s language id (0 if the mirror didn't say). */
+  language_id: number;
+  /** Set for Featured Artist songs. */
+  track_id: number | null;
+  spotlight: boolean;
   bpm: number;
   preview_url: string | null;
   last_updated: string | null;

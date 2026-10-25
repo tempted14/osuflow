@@ -17,16 +17,24 @@ import {
   FILTER_AUTO_PAGES,
   FILTER_WANT,
   FRESH_FOR_MS,
+  GENRES,
+  LANGUAGES,
+  NO_FILTERS,
+  STATUSES,
+  activeFilterCount,
   applyLibraryDelta,
   hasDifficultyIn,
   keepPaging,
+  matchesFilters,
   mergeResults,
+  narrowsResults,
   parseBeatmapReference,
   planFetch,
   searchKey,
   visibleResults,
 } from "./results";
 import type { FetchSituation } from "./results";
+import { loadPrefs, parsePrefs } from "./prefs";
 import { SORTS, defaultDirection, directionWords, reverse } from "./sorting";
 import { starColor } from "./starColor";
 import type {
@@ -256,17 +264,18 @@ describe("the difficulty filter", () => {
   it("trims the grid to the band, together with hide installed", () => {
     const easy = { id: 1, ...stars(1.5) } as Beatmapset;
     const hard = { id: 2, ...stars(3.5) } as Beatmapset;
-    expect(visibleResults([easy, hard], new Set(), false, new Set(), "hard", null).map((s) => s.id)).toEqual([2]);
-    expect(visibleResults([easy, hard], new Set([2]), true, new Set(), "hard", null)).toEqual([]);
-    expect(visibleResults([easy, hard], new Set(), false, new Set(), "any", null)).toHaveLength(2);
+    const hardOnly = { ...NO_FILTERS, tier: "hard" as const };
+    expect(visibleResults([easy, hard], new Set(), false, new Set(), hardOnly, null).map((s) => s.id)).toEqual([2]);
+    expect(visibleResults([easy, hard], new Set([2]), true, new Set(), hardOnly, null)).toEqual([]);
+    expect(visibleResults([easy, hard], new Set(), false, new Set(), NO_FILTERS, null)).toHaveLength(2);
   });
 
   it("fetches more pages by itself only while few maps match, and only so far", () => {
-    expect(keepPaging("any", 0, 0)).toBe(false);
-    expect(keepPaging("hard", FILTER_WANT - 1, 0)).toBe(true);
-    expect(keepPaging("hard", FILTER_WANT, 0)).toBe(false);
-    expect(keepPaging("hard", 0, FILTER_AUTO_PAGES - 1)).toBe(true);
-    expect(keepPaging("hard", 0, FILTER_AUTO_PAGES)).toBe(false);
+    expect(keepPaging(false, 0, 0)).toBe(false);
+    expect(keepPaging(true, FILTER_WANT - 1, 0)).toBe(true);
+    expect(keepPaging(true, FILTER_WANT, 0)).toBe(false);
+    expect(keepPaging(true, 0, FILTER_AUTO_PAGES - 1)).toBe(true);
+    expect(keepPaging(true, 0, FILTER_AUTO_PAGES)).toBe(false);
   });
 
   it("shows the star range of a set's difficulties", () => {
@@ -275,6 +284,108 @@ describe("the difficulty filter", () => {
     expect(range(4.3)).toBe("4.3");
     expect(range(4.31, 4.34)).toBe("4.3");
     expect(range()).toBeNull();
+  });
+});
+
+describe("the osu!-style filters", () => {
+  const map = (patch: Partial<Beatmapset> = {}) => ({ id: 1, genre_id: 5, language_id: 3, beatmaps: [], ...patch }) as Beatmapset;
+
+  it("keeps everything but explicit maps by default, like the osu! website", () => {
+    expect(matchesFilters(map(), NO_FILTERS, null)).toBe(true);
+    expect(matchesFilters(map({ nsfw: true }), NO_FILTERS, null)).toBe(false);
+    expect(matchesFilters(map({ nsfw: true }), { ...NO_FILTERS, showExplicit: true }, null)).toBe(true);
+  });
+
+  it("filters by genre and language, which are single choices", () => {
+    expect(matchesFilters(map({ genre_id: 11 }), { ...NO_FILTERS, genre: 11 }, null)).toBe(true);
+    expect(matchesFilters(map({ genre_id: 5 }), { ...NO_FILTERS, genre: 11 }, null)).toBe(false);
+    expect(matchesFilters(map({ language_id: 3 }), { ...NO_FILTERS, language: 3 }, null)).toBe(true);
+    expect(matchesFilters(map({ language_id: 2 }), { ...NO_FILTERS, language: 3 }, null)).toBe(false);
+    // A set the mirror gave no genre for cannot satisfy a genre filter.
+    expect(matchesFilters(map({ genre_id: 0 }), { ...NO_FILTERS, genre: 5 }, null)).toBe(false);
+  });
+
+  it("filters by video, storyboard, featured artist and spotlight", () => {
+    expect(matchesFilters(map({ video: true }), { ...NO_FILTERS, video: true }, null)).toBe(true);
+    expect(matchesFilters(map({ video: false }), { ...NO_FILTERS, video: true }, null)).toBe(false);
+    expect(matchesFilters(map({ storyboard: true }), { ...NO_FILTERS, storyboard: true }, null)).toBe(true);
+    expect(matchesFilters(map({ track_id: 9784 }), { ...NO_FILTERS, featured: true }, null)).toBe(true);
+    expect(matchesFilters(map({ track_id: null }), { ...NO_FILTERS, featured: true }, null)).toBe(false);
+    expect(matchesFilters(map({ spotlight: true }), { ...NO_FILTERS, spotlight: true }, null)).toBe(true);
+    expect(matchesFilters(map({ spotlight: false }), { ...NO_FILTERS, spotlight: true }, null)).toBe(false);
+  });
+
+  it("combines every filter: a set must pass all of them", () => {
+    const both = { ...NO_FILTERS, genre: 11, video: true };
+    expect(matchesFilters(map({ genre_id: 11, video: true }), both, null)).toBe(true);
+    expect(matchesFilters(map({ genre_id: 11, video: false }), both, null)).toBe(false);
+    expect(matchesFilters(map({ genre_id: 5, video: true }), both, null)).toBe(false);
+  });
+
+  it("counts what differs from the defaults, and only some of it narrows the results", () => {
+    expect(activeFilterCount(NO_FILTERS)).toBe(0);
+    expect(activeFilterCount({ ...NO_FILTERS, genre: 4, video: true, tier: "hard" })).toBe(3);
+    expect(narrowsResults(NO_FILTERS)).toBe(false);
+    expect(narrowsResults({ ...NO_FILTERS, showExplicit: true })).toBe(false); // shows more, never fewer
+    expect(activeFilterCount({ ...NO_FILTERS, showExplicit: true })).toBe(1); // but it is still a change
+    expect(narrowsResults({ ...NO_FILTERS, language: 3 })).toBe(true);
+  });
+
+  it("lists osu!'s genres and languages once each, with ids that match real mirror results", () => {
+    expect(new Set(GENRES.map((g) => g.id)).size).toBe(GENRES.length);
+    expect(new Set(LANGUAGES.map((l) => l.id)).size).toBe(LANGUAGES.length);
+    expect(GENRES.find((g) => g.id === 11)?.label).toBe("Metal"); // All That Remains
+    expect(GENRES.find((g) => g.id === 12)?.label).toBe("Classical"); // Nivem City
+    expect(LANGUAGES.find((l) => l.id === 3)?.label).toBe("Japanese");
+    expect(LANGUAGES.find((l) => l.id === 5)?.label).toBe("Instrumental");
+    expect(STATUSES.map(([, value]) => value)).toEqual([1, 4, 3, 0, -1, -2]);
+  });
+});
+
+describe("remembered preferences", () => {
+  it("start from the defaults when nothing is saved or the saved text is garbage", () => {
+    for (const raw of [null, "", "not json", "[]", "42", "null"]) {
+      const prefs = parsePrefs(raw);
+      expect(prefs.status).toBe(1);
+      expect(prefs.sort).toBe("relevance");
+      expect(prefs.filters).toEqual(NO_FILTERS);
+      expect(prefs.layout).toBe("list");
+      expect(prefs.panelOpen).toBe(false);
+    }
+  });
+
+  it("round-trip what was saved", () => {
+    const saved = {
+      mode: 3, status: 4, sort: "bpm", dir: "asc", layout: "cards", panelOpen: true,
+      filters: { ...NO_FILTERS, tier: "insane", genre: 10, language: 3, video: true, featured: true, showExplicit: true },
+    };
+    expect(parsePrefs(JSON.stringify(saved))).toEqual(saved);
+  });
+
+  it("drop a bad value on its own without losing the rest", () => {
+    const prefs = parsePrefs(JSON.stringify({
+      mode: 9, status: 77, sort: "popularity", dir: "sideways", layout: "mosaic", panelOpen: "yes",
+      filters: { tier: "godlike", genre: 999, language: "english", video: "true", storyboard: true },
+    }));
+    expect(prefs.mode).toBeNull();
+    expect(prefs.status).toBe(1);
+    expect(prefs.sort).toBe("relevance");
+    expect(prefs.layout).toBe("list");
+    expect(prefs.panelOpen).toBe(false);
+    expect(prefs.filters.tier).toBe("any");
+    expect(prefs.filters.genre).toBeNull();
+    expect(prefs.filters.language).toBeNull();
+    expect(prefs.filters.video).toBe(false); // the string "true" is not a boolean
+    expect(prefs.filters.storyboard).toBe(true); // the one good value survives
+  });
+
+  it("use the direction people expect for the saved sort when none was saved", () => {
+    expect(parsePrefs(JSON.stringify({ sort: "title" })).dir).toBe("asc");
+    expect(parsePrefs(JSON.stringify({ sort: "plays" })).dir).toBe("desc");
+  });
+
+  it("fall back to the defaults when the browser blocks storage", () => {
+    expect(loadPrefs().filters).toEqual(NO_FILTERS); // no localStorage in the test environment
   });
 });
 

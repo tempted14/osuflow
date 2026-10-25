@@ -23,12 +23,18 @@ the browser registration, if you turned either on.
 - **Search:** press `Ctrl+Shift+D` in osu!. A frosted-glass card opens over the game with your
   search. Type to search (or paste an osu! beatmap link or ID to jump straight to that map), arrow
   keys to move, `Enter` to download, `Space` to preview, `Esc` to close.
-- **Sort and filter:** pick a game mode and status, then one of ten sort orders (ranked date, last
-  updated, submitted, plays, favourites, stars, BPM, length, title, artist). The button beside the
-  menu says which way it runs ("Newest first", "Hardest first", "A to Z") and reverses it. The *Stars*
-  menu keeps maps with a difficulty in an osu! band, Easy to Expert+. The beatmap mirrors can't filter by
-  stars themselves, so that filter works on the results already fetched; for a rare band osu!flow fetches
-  a few more pages and then offers *Keep searching*.
+- **Browse like the osu! website:** pick a game mode and what to *Show* (ranked, loved, qualified,
+  pending, WIP, graveyard), then one of ten sort orders (ranked date, last updated, submitted, plays,
+  favourites, stars, BPM, length, title, artist). The button beside the menu says which way it runs
+  ("Newest first", "Hardest first", "A to Z") and reverses it. Switch between a list (wide rows with a
+  small cover) and cards. Your choices are remembered.
+- **Filters:** one button opens the website's filter list: difficulty (Easy to Expert+), genre,
+  language, has video, has storyboard, featured artists, spotlighted maps, hide installed, and explicit
+  content (hidden by default, as on the website). The beatmap mirrors can't filter by any of this
+  themselves, so the filters work on the results already fetched and apply instantly; for a rare
+  combination osu!flow fetches a few more pages and then offers *Keep searching*. What needs an osu!
+  account (rank achieved, played, favourites, subscribed mappers, recommended difficulty) isn't possible
+  here.
 - **Background:** osu!flow lives in the system tray. Closing the settings window leaves it running;
   the tray menu has *Search maps*, *Settings*, *Start with Windows* and *Quit*. With *Start with
   Windows* on, it starts quietly at login and shows no window.

@@ -9,15 +9,98 @@ export function mergeResults(existing: Beatmapset[], incoming: Beatmapset[]): Be
 /** The bands osu! colours by star rating: a way to ask for maps of a level without typing numbers. */
 export type Tier = "any" | "easy" | "normal" | "hard" | "insane" | "expert" | "expertPlus";
 
-export const TIERS: { value: Tier; label: string; min: number; max: number }[] = [
-  { value: "any", label: "Any", min: 0, max: Infinity },
-  { value: "easy", label: "Easy · under 2★", min: 0, max: 2 },
-  { value: "normal", label: "Normal · 2–2.7★", min: 2, max: 2.7 },
-  { value: "hard", label: "Hard · 2.7–4★", min: 2.7, max: 4 },
-  { value: "insane", label: "Insane · 4–5.3★", min: 4, max: 5.3 },
-  { value: "expert", label: "Expert · 5.3–6.5★", min: 5.3, max: 6.5 },
-  { value: "expertPlus", label: "Expert+ · 6.5★ up", min: 6.5, max: Infinity },
+export const TIERS: { value: Tier; label: string; short: string; min: number; max: number }[] = [
+  { value: "any", label: "Any difficulty", short: "Any", min: 0, max: Infinity },
+  { value: "easy", label: "Easy · under 2★", short: "Easy", min: 0, max: 2 },
+  { value: "normal", label: "Normal · 2–2.7★", short: "Normal", min: 2, max: 2.7 },
+  { value: "hard", label: "Hard · 2.7–4★", short: "Hard", min: 2.7, max: 4 },
+  { value: "insane", label: "Insane · 4–5.3★", short: "Insane", min: 4, max: 5.3 },
+  { value: "expert", label: "Expert · 5.3–6.5★", short: "Expert", min: 5.3, max: 6.5 },
+  { value: "expertPlus", label: "Expert+ · 6.5★ and up", short: "Expert+", min: 6.5, max: Infinity },
 ];
+
+/** The categories a search can ask the mirrors for, as osu! API status ids (the mirrors accept -2 to 4). */
+export const STATUSES: [string, number][] = [
+  ["Ranked", 1],
+  ["Loved", 4],
+  ["Qualified", 3],
+  ["Pending", 0],
+  ["WIP", -1],
+  ["Graveyard", -2],
+];
+
+/** osu!'s own genre ids, in the order its website lists them (checked against real mirror results). */
+export const GENRES: { id: number; label: string }[] = [
+  { id: 1, label: "Unspecified" },
+  { id: 2, label: "Video Game" },
+  { id: 3, label: "Anime" },
+  { id: 4, label: "Rock" },
+  { id: 5, label: "Pop" },
+  { id: 6, label: "Other" },
+  { id: 7, label: "Novelty" },
+  { id: 9, label: "Hip Hop" },
+  { id: 10, label: "Electronic" },
+  { id: 11, label: "Metal" },
+  { id: 12, label: "Classical" },
+  { id: 13, label: "Folk" },
+  { id: 14, label: "Jazz" },
+];
+
+/** osu!'s own language ids, in the order its website lists them. */
+export const LANGUAGES: { id: number; label: string }[] = [
+  { id: 2, label: "English" },
+  { id: 4, label: "Chinese" },
+  { id: 7, label: "French" },
+  { id: 8, label: "German" },
+  { id: 11, label: "Italian" },
+  { id: 3, label: "Japanese" },
+  { id: 6, label: "Korean" },
+  { id: 10, label: "Spanish" },
+  { id: 9, label: "Swedish" },
+  { id: 12, label: "Russian" },
+  { id: 13, label: "Polish" },
+  { id: 5, label: "Instrumental" },
+  { id: 14, label: "Other" },
+  { id: 1, label: "Unspecified" },
+];
+
+/** Everything that narrows the results inside the app, because neither mirror can filter by any of it. */
+export interface ClientFilters {
+  tier: Tier;
+  /** osu!'s genre id, or null for any. */
+  genre: number | null;
+  /** osu!'s language id, or null for any. */
+  language: number | null;
+  video: boolean;
+  storyboard: boolean;
+  /** Only Featured Artist songs. */
+  featured: boolean;
+  /** Only spotlighted maps. */
+  spotlight: boolean;
+  /** Explicit maps stay hidden unless this is on, as on the osu! website. */
+  showExplicit: boolean;
+}
+
+export const NO_FILTERS: ClientFilters = {
+  tier: "any",
+  genre: null,
+  language: null,
+  video: false,
+  storyboard: false,
+  featured: false,
+  spotlight: false,
+  showExplicit: false,
+};
+
+/** How many settings differ from the defaults: the number on the Filters button. */
+export function activeFilterCount(filters: ClientFilters): number {
+  return (Object.keys(NO_FILTERS) as (keyof ClientFilters)[]).filter((key) => filters[key] !== NO_FILTERS[key]).length;
+}
+
+/** True when a filter can leave few matches on a page. Showing explicit maps doesn't narrow anything. */
+export function narrowsResults(filters: ClientFilters): boolean {
+  return activeFilterCount({ ...filters, showExplicit: NO_FILTERS.showExplicit }) > 0;
+}
 
 /** True when the set has a difficulty in the tier (counting only the chosen mode's, if a mode is chosen). */
 export function hasDifficultyIn(set: Pick<Beatmapset, "beatmaps">, tier: Tier, mode: number | null): boolean {
@@ -29,34 +112,45 @@ export function hasDifficultyIn(set: Pick<Beatmapset, "beatmaps">, tier: Tier, m
   );
 }
 
+/** Whether one set passes every filter. A set the mirror gave no genre or language for fails those two filters. */
+export function matchesFilters(set: Beatmapset, filters: ClientFilters, mode: number | null): boolean {
+  if (!filters.showExplicit && set.nsfw) return false;
+  if (filters.genre !== null && set.genre_id !== filters.genre) return false;
+  if (filters.language !== null && set.language_id !== filters.language) return false;
+  if (filters.video && !set.video) return false;
+  if (filters.storyboard && !set.storyboard) return false;
+  if (filters.featured && !set.track_id) return false;
+  if (filters.spotlight && !set.spotlight) return false;
+  return hasDifficultyIn(set, filters.tier, mode);
+}
+
 /**
  * What the grid shows. With "hide installed" on, sets already in the library disappear, except
  * ones with a download in progress or just finished, so a card doesn't vanish under the cursor.
- * A difficulty tier keeps only sets that have a difficulty in it. The mirrors can't filter by
- * stars themselves, so this runs here on what they sent.
+ * The filters (difficulty, genre, language, extras, explicit content) run here on what the
+ * mirrors sent, which is instant and needs no new search.
  */
 export function visibleResults(
   results: Beatmapset[],
   installed: ReadonlySet<number>,
   hideInstalled: boolean,
   keep: ReadonlySet<number>,
-  tier: Tier = "any",
+  filters: ClientFilters = NO_FILTERS,
   mode: number | null = null,
 ): Beatmapset[] {
-  if (!hideInstalled && tier === "any") return results;
   return results.filter(
-    (set) => hasDifficultyIn(set, tier, mode) && (!hideInstalled || !installed.has(set.id) || keep.has(set.id)),
+    (set) => matchesFilters(set, filters, mode) && (!hideInstalled || !installed.has(set.id) || keep.has(set.id)),
   );
 }
 
-/** With a difficulty tier on, how many matches are enough to stop fetching pages by itself. */
+/** With a filter on, how many matches are enough to stop fetching pages by itself. */
 export const FILTER_WANT = 10;
-/** And how many pages it may fetch in one go looking for them, so a rare tier can't hammer the mirrors. */
+/** And how many pages it may fetch in one go looking for them, so a rare filter can't hammer the mirrors. */
 export const FILTER_AUTO_PAGES = 6;
 
-/** Whether to fetch another page unasked: only with a tier on, only while few maps match, and only so far. */
-export function keepPaging(tier: Tier, shown: number, pagesTried: number): boolean {
-  return tier !== "any" && shown < FILTER_WANT && pagesTried < FILTER_AUTO_PAGES;
+/** Whether to fetch another page unasked: only with a filter on, only while few maps match, and only so far. */
+export function keepPaging(narrowing: boolean, shown: number, pagesTried: number): boolean {
+  return narrowing && shown < FILTER_WANT && pagesTried < FILTER_AUTO_PAGES;
 }
 
 /**

@@ -108,6 +108,16 @@ pub struct Beatmapset {
     pub storyboard: bool,
     #[serde(deserialize_with = "null_default")]
     pub nsfw: bool,
+    /// osu!'s genre id (2 video game, 3 anime, 4 rock, 5 pop, 10 electronic, 11 metal, ...); 0 if not given.
+    #[serde(deserialize_with = "null_default")]
+    pub genre_id: u8,
+    /// osu!'s language id (2 English, 3 Japanese, 5 instrumental, ...); 0 if not given.
+    #[serde(deserialize_with = "null_default")]
+    pub language_id: u8,
+    /// Set when the song is a Featured Artist track (checked against the osu! website's own chips).
+    pub track_id: Option<u64>,
+    #[serde(deserialize_with = "null_default")]
+    pub spotlight: bool,
     #[serde(deserialize_with = "null_default")]
     pub bpm: f64,
     pub preview_url: Option<String>,
@@ -177,6 +187,29 @@ mod tests {
         assert_eq!(set.bpm, 0.0);
         assert_eq!(set.covers, Covers::default());
         assert!(set.beatmaps.is_empty());
+    }
+
+    #[test]
+    fn genre_language_and_featured_artist_survive_from_both_mirrors() {
+        for (name, body) in [("catboy.best", CATBOY), ("osu.direct", OSU_DIRECT)] {
+            let sets: Vec<Beatmapset> = serde_json::from_str(body).unwrap();
+            assert!(sets.iter().any(|s| s.genre_id > 0), "{name}: no genre came through");
+            assert!(sets.iter().any(|s| s.language_id > 0), "{name}: no language came through");
+        }
+        let json = serde_json::to_value(serde_json::from_str::<Beatmapset>(
+            r#"{"id":1,"genre_id":11,"language_id":3,"track_id":9784,"spotlight":true}"#,
+        )
+        .unwrap())
+        .unwrap();
+        // The webview reads them under the osu! API's own names.
+        assert_eq!((json["genre_id"].as_u64(), json["language_id"].as_u64()), (Some(11), Some(3)));
+        assert_eq!((json["track_id"].as_u64(), json["spotlight"].as_bool()), (Some(9784), Some(true)));
+    }
+
+    #[test]
+    fn the_filter_fields_default_when_missing_or_null() {
+        let set: Beatmapset = serde_json::from_str(r#"{"id":5,"genre_id":null,"track_id":null}"#).unwrap();
+        assert_eq!((set.genre_id, set.language_id, set.track_id, set.spotlight), (0, 0, None, false));
     }
 
     #[test]

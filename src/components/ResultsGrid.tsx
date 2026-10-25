@@ -2,9 +2,11 @@ import { useEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Beatmapset, DownloadJob } from "../lib/types";
 import { friendlyError } from "../lib/format";
+import type { Layout } from "../lib/prefs";
 import { BeatmapCard } from "./BeatmapCard";
 
-const MIN_CARD_WIDTH = 280;
+/** How narrow a card may get before the grid drops a column: list rows need more width than cards. */
+const minCardWidth = (layout: Layout) => (layout === "list" ? 380 : 280);
 const GAP = 12;
 
 interface Props {
@@ -18,6 +20,8 @@ interface Props {
   error: string | null;
   /** While true the cards show no cover images, so the window doesn't keep them decoded in memory. */
   releaseCovers?: boolean;
+  /** Wide rows with a small cover (list) or cards with a wide cover. */
+  layout: Layout;
   /** What to show when nothing matches; the grid falls back to a plain line. */
   empty?: ReactNode;
   /** Told how many columns fit, so arrow-key navigation matches what is on screen. */
@@ -31,7 +35,8 @@ interface Props {
 }
 
 export function ResultsGrid(props: Props) {
-  const { onColumnsChange, onLoadMore, sets, hasMore, loading, selected } = props;
+  const { onColumnsChange, onLoadMore, sets, hasMore, loading, selected, layout } = props;
+  const minCard = minCardWidth(layout);
   const scroller = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
 
@@ -41,11 +46,11 @@ export function ResultsGrid(props: Props) {
     const observer = new ResizeObserver(() => {
       const style = getComputedStyle(element);
       const inner = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      onColumnsChange(Math.max(1, Math.floor((inner + GAP) / (MIN_CARD_WIDTH + GAP))));
+      onColumnsChange(Math.max(1, Math.floor((inner + GAP) / (minCard + GAP))));
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [onColumnsChange]);
+  }, [onColumnsChange, minCard]);
 
   // Infinite scroll. Re-created whenever the list or loading state changes, so a sentinel that
   // is still on screen after a short page triggers the next page instead of getting stuck.
@@ -95,13 +100,13 @@ export function ResultsGrid(props: Props) {
       )}
       {props.loading && sets.length === 0 && !props.error && (
         // Placeholders keep the layout steady (and the window alive) while the first results load.
-        <ul className="grid" style={{ "--gap": `${GAP}px`, "--min-card": `${MIN_CARD_WIDTH}px` } as CSSProperties} aria-hidden>
+        <ul className={`grid ${layout}`} style={{ "--gap": `${GAP}px`, "--min-card": `${minCard}px` } as CSSProperties} aria-hidden>
           {Array.from({ length: 6 }, (_, index) => (
             <li key={index} className="card ghost" style={{ "--i": index } as CSSProperties} />
           ))}
         </ul>
       )}
-      <ul className="grid" style={{ "--gap": `${GAP}px`, "--min-card": `${MIN_CARD_WIDTH}px` } as CSSProperties}>
+      <ul className={`grid ${layout}`} style={{ "--gap": `${GAP}px`, "--min-card": `${minCard}px` } as CSSProperties}>
         {sets.map((set, index) => (
           <BeatmapCard
             key={set.id}
@@ -112,6 +117,7 @@ export function ResultsGrid(props: Props) {
             selected={index === selected}
             playing={props.playingId === set.id}
             releaseCover={props.releaseCovers}
+            layout={layout}
             onDownload={() => props.onDownload(set)}
             onCancel={() => props.onCancel(set.id)}
             onPreview={() => props.onPreview(set)}
