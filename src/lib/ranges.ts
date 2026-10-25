@@ -89,15 +89,6 @@ export function spanLabel(def: SliderDef, span: Span): string {
   return min === max ? def.format(min) : `${def.format(min)} – ${def.format(max)}`;
 }
 
-/** The same in the fewest characters, for a chip: "4.0★–6.2★", "9.0+", "≤ 3:00", "180". Empty when nothing is set. */
-export function spanShort(def: SliderDef, span: Span): string {
-  const { min, max } = span;
-  if (min === null && max === null) return "";
-  if (min === null) return `≤ ${def.format(max as number)}`;
-  if (max === null) return `${def.format(min)}+`;
-  return min === max ? def.format(min) : `${def.format(min)}–${def.format(max)}`;
-}
-
 /**
  * Makes a saved or typed span safe to use: numbers only, inside the track, the right way round, and
  * with the track's own ends turned back into "no limit". Anything unusable means no limit.

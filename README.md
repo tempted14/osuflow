@@ -41,13 +41,12 @@ the browser registration, if you turned either on.
   combination osu!flow fetches a few more pages and then offers *Keep searching*. What needs an osu!
   account (rank achieved, played, favourites, subscribed mappers, recommended difficulty) isn't possible
   here.
-- **Sliders:** the blue options in the Filters panel (stars, AR, CS, OD, HP, BPM and length) open a
-  two-handle slider when clicked. All open sliders sit in one fixed area at the bottom of the panel,
-  each in its own place, so opening or closing one never moves anything. Drag either end (or click the
+- **Sliders:** the bottom of the Filters panel always shows a two-handle slider each for stars, AR, CS,
+  OD, HP, BPM and length, so nothing pops in or moves when you use one. Drag either end (or click the
   track to move the nearer one, or use the arrow keys); a handle at the very end of a slider means no
-  limit. They apply as you drag, are remembered, show their setting on the option itself, and the value
-  above each slider clears it. They combine with the difficulty chips and with any conditions typed in
-  the search box, and everything must hold on the same difficulty of a map.
+  limit. A slider that is narrowing the results turns blue and shows its range, and the value above it
+  clears it. They apply as you drag, are remembered, and combine with the difficulty chips and with any
+  conditions typed in the search box; everything must hold on the same difficulty of a map.
 - **Search conditions:** the osu! website's and osu!lazer's search syntax works in the search box:
   `stars>5`, `ar<=9.5`, `cs`, `od`, `hp`, `bpm=180..200`, `length<3m` (seconds, `m`, `h` or `3:30`),
   `keys=4` for mania, and `mapper=name`, `artist=name` or `title=name` (quote names with spaces). `>`,

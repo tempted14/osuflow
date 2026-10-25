@@ -33,10 +33,9 @@
   --stroke: rgba(255, 255, 255, 0.08);
   --stroke-strong: rgba(255, 255, 255, 0.18);
 
-  /* Blue marks everything that opens a slider; pink stays the accent for what is chosen. */
+  /* Blue marks a slider that is narrowing the results; pink stays the accent for what is chosen. */
   --range: #8fd8ff;
   --range-soft: rgba(143, 216, 255, 0.14);
-  --range-ring: rgba(143, 216, 255, 0.38);
   /* Menus and floating hints: lifted off the page, and opaque enough to read over anything. */
   --flyout: rgb(38, 34, 56);
 
@@ -822,53 +821,19 @@ input[type="checkbox"]:focus-visible {
   font-size: 0.9rem;
 }
 
-.chip:hover:not(.on):not(.range):not(:disabled) {
+.chip:hover:not(.on):not(:disabled) {
   background: var(--surface-hover);
   color: var(--text);
 }
 
-/* A chosen option: lifted, with a pink hairline. (Blue is reserved for options that open a slider.) */
+/* A chosen option: lifted, with a pink hairline. */
 .chip.on {
   background: var(--surface-strong);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(255, 102, 170, 0.4);
 }
 
-/* Blue means "opens a slider": the arrow, the colour and the setting shown on the chip. */
-.chip.range {
-  color: var(--range);
-}
-
-.chip.range:hover:not(:disabled) {
-  background: var(--range-soft);
-  color: #c4ecff;
-}
-
-.chip.range.open {
-  background: var(--range-soft);
-  box-shadow: inset 0 0 0 1px var(--range-ring);
-}
-
-.chip.range svg {
-  opacity: 0.85;
-  transition: transform 240ms var(--ease);
-}
-
-.chip.range.open svg {
-  transform: rotate(180deg);
-}
-
-.chip-value {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(143, 216, 255, 0.18);
-  color: #d6f1ff;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-  animation: pop 180ms var(--ease) both;
-}
-
-/* ---------- the sliders: one area at the bottom of the panel ---------- */
+/* ---------- the sliders: always shown, in one block at the bottom of the panel ---------- */
 
 .fbottom {
   flex: none;
@@ -877,91 +842,33 @@ input[type="checkbox"]:focus-visible {
   border-top: 1px solid var(--stroke);
 }
 
-/* The same height whether none or all seven sliders are open, and every slider has its own cell, so opening
-   or closing one never moves anything else. */
-.sarea {
-  position: relative;
-  height: 106px;
-  overflow-y: auto;
-}
-
+/* The seven sliders are always there, in a grid that never changes, so nothing appears, disappears or
+   moves when one is used. */
 .sgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
-  gap: 4px 26px;
+  gap: 6px 28px;
 }
 
-.sslot {
-  min-width: 0;
-  min-height: 46px;
-}
-
-.sslot > .slider {
-  animation: slot-in 220ms var(--ease) both;
-}
-
-.sslot.leaving > .slider {
-  animation: slot-out 160ms var(--ease) both;
-  pointer-events: none;
-}
-
-@keyframes slot-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+@media (max-width: 880px) {
+  .sgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@keyframes slot-out {
-  to {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+@media (max-width: 620px) {
+  .sgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-.sempty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms var(--ease);
-}
-
-.sempty.on {
-  opacity: 1;
 }
 
 .ffoot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   height: 28px;
   margin-top: 4px;
-}
-
-.flegend {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.flegend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--range);
 }
 
 .ffoot .reset {
@@ -987,8 +894,14 @@ input[type="checkbox"]:focus-visible {
 }
 
 .slider-label {
-  color: var(--range);
+  color: var(--text-2);
   font-weight: 600;
+  transition: color var(--medium) var(--ease);
+}
+
+/* Blue marks a slider that is narrowing the results. */
+.slider.on .slider-label {
+  color: var(--range);
 }
 
 .slider-value {

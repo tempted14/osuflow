@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MENU_NAV_KEYS, stepIndex, typeAhead } from "./menu";
 import { actingIndex } from "./nav";
-import { SLIDERS, spanShort } from "./ranges";
-import type { SliderDef } from "./ranges";
-
-const slider = (key: SliderDef["key"]) => SLIDERS.find((def) => def.key === key) as SliderDef;
 
 describe("moving through a menu", () => {
   it("steps by one and by a page, and stops at the ends", () => {
@@ -66,15 +62,5 @@ describe("what Enter acts on", () => {
 
   it("is nothing when nothing is pointed at or selected", () => {
     expect(actingIndex({ ...base, pointerAt: 200, keyAt: 100 })).toBe(-1);
-  });
-});
-
-describe("a slider on a chip", () => {
-  it("is as short as it can be", () => {
-    expect(spanShort(slider("stars"), { min: null, max: null })).toBe("");
-    expect(spanShort(slider("stars"), { min: 4, max: 6.2 })).toBe("4.0★–6.2★");
-    expect(spanShort(slider("ar"), { min: 9, max: null })).toBe("9.0+");
-    expect(spanShort(slider("length"), { min: null, max: 240 })).toBe("≤ 4:00");
-    expect(spanShort(slider("bpm"), { min: 180, max: 180 })).toBe("180");
   });
 });
