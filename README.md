@@ -23,7 +23,7 @@ the browser registration, if you turned either on.
 - **Search:** press `Ctrl+Shift+D` in osu!. A frosted-glass card opens over the game with your
   search. Type to search (or paste an osu! beatmap link or ID to jump straight to that map), arrow
   keys to move, `Enter` to download, `Space` to preview, `Esc` to close. **No click needed:** rest the
-  pointer (or a pen or finger, on a tablet) over a map and press `Enter` to download it or `Space` to
+  pointer (or a pen, on a tablet) over a map and press `Enter` to download it or `Space` to
   preview it. It acts on the map under the pointer once the pointer has moved since your last key press,
   so typing a search and pressing `Enter` never downloads whatever happens to sit under the cursor.
 - **Browse like the osu! website:** pick a game mode on the sliding switch and what to *Show* (ranked,
