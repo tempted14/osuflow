@@ -22,9 +22,12 @@ the browser registration, if you turned either on.
 
 - **Search:** press `Ctrl+Shift+D` in osu!. A frosted-glass card opens over the game with your
   search. Type to search (or paste an osu! beatmap link or ID to jump straight to that map), arrow
-  keys to move, `Enter` to download, `Space` to preview, `Esc` to close.
-- **Browse like the osu! website:** pick a game mode and what to *Show* (ranked, loved, qualified,
-  pending, WIP, graveyard), then one of ten sort orders (ranked date, last updated, submitted, plays,
+  keys to move, `Enter` to download, `Space` to preview, `Esc` to close. **No click needed:** rest the
+  pointer (or a pen or finger, on a tablet) over a map and press `Enter` to download it or `Space` to
+  preview it. It acts on the map under the pointer once the pointer has moved since your last key press,
+  so typing a search and pressing `Enter` never downloads whatever happens to sit under the cursor.
+- **Browse like the osu! website:** pick a game mode on the sliding switch and what to *Show* (ranked,
+  loved, qualified, pending, WIP, graveyard) from its drop-down, then one of ten sort orders (ranked date, last updated, submitted, plays,
   favourites, stars, BPM, length, title, artist). The button beside the menu says which way it runs
   ("Newest first", "Hardest first", "A to Z") and reverses it. Switch between a list (wide rows with a
   small cover) and cards. Your choices are remembered.
@@ -35,13 +38,20 @@ the browser registration, if you turned either on.
   combination osu!flow fetches a few more pages and then offers *Keep searching*. What needs an osu!
   account (rank achieved, played, favourites, subscribed mappers, recommended difficulty) isn't possible
   here.
+- **Sliders:** the blue options in the Filters panel (stars, AR, CS, OD, HP, BPM and length) open a
+  two-handle slider when clicked. All open sliders sit in one fixed area at the bottom of the panel,
+  each in its own place, so opening or closing one never moves anything. Drag either end (or click the
+  track to move the nearer one, or use the arrow keys); a handle at the very end of a slider means no
+  limit. They apply as you drag, are remembered, show their setting on the option itself, and the value
+  above each slider clears it. They combine with the difficulty chips and with any conditions typed in
+  the search box, and everything must hold on the same difficulty of a map.
 - **Search conditions:** the osu! website's and osu!lazer's search syntax works in the search box:
   `stars>5`, `ar<=9.5`, `cs`, `od`, `hp`, `bpm=180..200`, `length<3m` (seconds, `m`, `h` or `3:30`),
   `keys=4` for mania, and `mapper=name`, `artist=name` or `title=name` (quote names with spaces). `>`,
   `>=`, `<`, `<=` compare, `=` matches about that value, `a..b` is a range. Several conditions must all
   hold on the *same* difficulty, as in the game. They show as chips under the box (click one to remove
   it), only the other words go to the mirror, and editing a condition narrows the results at once
-  without a new search. The Filters panel has examples to click.
+  without a new search.
 - **Background:** osu!flow lives in the system tray. Closing the settings window leaves it running;
   the tray menu has *Search maps*, *Settings*, *Start with Windows* and *Quit*. With *Start with
   Windows* on, it starts quietly at login and shows no window.

@@ -4,6 +4,17 @@ export const isNavKey = (key: string): key is NavKey =>
   key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
 
 /**
+ * Which card Enter and Space act on (-1 for none). A card the pointer rests over counts once the pointer
+ * has moved since the last key was pressed (typing, an arrow, Tab): the person is pointing at it, so there
+ * is no need to click first, which is what a pen or touch screen with a keyboard needs. Without that, it is
+ * the card chosen with the arrow keys. Moving the pointer after typing is the signal that makes
+ * "type a search, then press Enter" safe: a card that merely sits under a resting cursor is never downloaded.
+ */
+export function actingIndex(input: { selected: number; hovered: number; pointerAt: number; keyAt: number }): number {
+  return input.hovered >= 0 && input.pointerAt > input.keyAt ? input.hovered : input.selected;
+}
+
+/**
  * The next selected card for an arrow key in a grid with `columns` columns and `count` cards.
  * -1 means "no card selected", which hands focus back to the search box: Up from the first row
  * leaves the grid, and Down from the search box enters it.

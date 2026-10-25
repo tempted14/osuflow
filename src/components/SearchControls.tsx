@@ -8,14 +8,19 @@ import type { ClientFilters } from "../lib/results";
 import { SORTS, defaultDirection, directionWords, reverse } from "../lib/sorting";
 import type { Settings, Sort } from "../lib/types";
 import { FilterPanel } from "./FilterPanel";
+import { Menu } from "./Menu";
+import { Segmented } from "./Segmented";
 
-const MODES: [string, number | null][] = [
-  ["All", null],
-  ["osu!", 0],
-  ["taiko", 1],
-  ["catch", 2],
-  ["mania", 3],
+const MODES: { value: number | null; label: string }[] = [
+  { value: null, label: "All" },
+  { value: 0, label: "osu!" },
+  { value: 1, label: "taiko" },
+  { value: 2, label: "catch" },
+  { value: 3, label: "mania" },
 ];
+
+const STATUS_OPTIONS = STATUSES.map(([label, value]) => ({ value, label }));
+const SORT_OPTIONS = SORTS.map((option) => ({ value: option.value, label: option.label }));
 
 function Icon(props: { children: ReactNode; size?: number; rotate?: number }) {
   const size = props.size ?? 14;
@@ -55,8 +60,6 @@ export function SearchControls(props: {
   onFilters: (patch: Partial<ClientFilters>) => void;
   onLayout: (layout: Layout) => void;
   onPanel: (open: boolean) => void;
-  /** Adds a word of search syntax to what is typed. */
-  onExample: (word: string) => void;
   onClose: () => void;
 }) {
   const { params, settings, filters } = props;
@@ -74,6 +77,7 @@ export function SearchControls(props: {
           className="search"
           type="search"
           placeholder="Search by title, artist or mapper, or paste a link"
+          aria-label="Search beatmaps"
           value={params.text}
           onChange={(e) => props.onChange({ text: e.currentTarget.value })}
           spellCheck={false}
@@ -124,45 +128,16 @@ export function SearchControls(props: {
           ))}
         </div>
       )}
-      <div className="filters">
-        <div className="tabs" role="group" aria-label="Game mode">
-          {MODES.map(([label, mode]) => (
-            <button
-              key={label}
-              className={params.mode === mode ? "on" : ""}
-              aria-pressed={params.mode === mode}
-              onClick={() => props.onChange({ mode })}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <label className="field">
-          <span>Show</span>
-          <select value={params.status} onChange={(e) => props.onChange({ status: Number(e.currentTarget.value) })}>
-            {STATUSES.map(([label, value]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Sort</span>
-          <select
-            value={params.sort}
-            onChange={(e) => {
-              const sort = e.currentTarget.value as Sort;
-              props.onChange({ sort, dir: defaultDirection(sort) });
-            }}
-          >
-            {SORTS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="toolbar">
+        <Segmented label="Game mode" options={MODES} value={params.mode} onChange={(mode) => props.onChange({ mode })} />
+        <i className="vsep" aria-hidden />
+        <Menu label="Show" options={STATUS_OPTIONS} value={params.status} onChange={(status) => props.onChange({ status })} />
+        <Menu
+          label="Sort"
+          options={SORT_OPTIONS}
+          value={params.sort}
+          onChange={(sort: Sort) => props.onChange({ sort, dir: defaultDirection(sort) })}
+        />
         {words && (
           <button
             className="dir"
@@ -176,52 +151,55 @@ export function SearchControls(props: {
             {words}
           </button>
         )}
-        <div className="layout" role="group" aria-label="Layout">
+        <div className="toolbar-end">
+          <div className="layout" role="group" aria-label="Layout">
+            <button
+              className={props.layout === "list" ? "on" : ""}
+              aria-pressed={props.layout === "list"}
+              onClick={() => props.onLayout("list")}
+              title="List"
+              aria-label="List layout"
+            >
+              <Icon size={15}>
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </Icon>
+            </button>
+            <button
+              className={props.layout === "cards" ? "on" : ""}
+              aria-pressed={props.layout === "cards"}
+              onClick={() => props.onLayout("cards")}
+              title="Cards"
+              aria-label="Card layout"
+            >
+              <Icon size={15}>
+                <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+              </Icon>
+            </button>
+          </div>
           <button
-            className={props.layout === "list" ? "on" : ""}
-            aria-pressed={props.layout === "list"}
-            onClick={() => props.onLayout("list")}
-            title="List"
-            aria-label="List layout"
+            className={`filters-btn${props.panelOpen ? " on" : ""}`}
+            aria-expanded={props.panelOpen}
+            onClick={() => props.onPanel(!props.panelOpen)}
+            title="Genre, language, difficulty and more"
           >
-            <Icon size={15}>
-              <path d="M4 7h16M4 12h16M4 17h16" />
+            <Icon size={14}>
+              <path d="M4 6h16M7 12h10M10 18h4" />
             </Icon>
-          </button>
-          <button
-            className={props.layout === "cards" ? "on" : ""}
-            aria-pressed={props.layout === "cards"}
-            onClick={() => props.onLayout("cards")}
-            title="Cards"
-            aria-label="Card layout"
-          >
-            <Icon size={15}>
-              <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+            Filters
+            {active > 0 && <span className="count">{active}</span>}
+            <Icon size={12} rotate={props.panelOpen ? 180 : 0}>
+              <path d="m6 9 6 6 6-6" />
             </Icon>
           </button>
         </div>
-        <button
-          className={`filters-btn${props.panelOpen ? " on" : ""}`}
-          aria-expanded={props.panelOpen}
-          onClick={() => props.onPanel(!props.panelOpen)}
-          title="Genre, language, difficulty and more"
-        >
-          Filters
-          {active > 0 && <span className="count">{active}</span>}
-          <Icon size={12} rotate={props.panelOpen ? 180 : 0}>
-            <path d="m6 9 6 6 6-6" />
-          </Icon>
-        </button>
       </div>
-      {props.panelOpen && (
-        <FilterPanel
-          filters={filters}
-          settings={settings}
-          onFilters={props.onFilters}
-          onSettings={props.onSettings}
-          onExample={props.onExample}
-        />
-      )}
+      <FilterPanel
+        open={props.panelOpen}
+        filters={filters}
+        settings={settings}
+        onFilters={props.onFilters}
+        onSettings={props.onSettings}
+      />
     </header>
   );
 }

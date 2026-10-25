@@ -11,7 +11,7 @@ import { useSearch } from "../hooks/useSearch";
 import type { SearchParams } from "../hooks/useSearch";
 import { useSettings } from "../hooks/useSettings";
 import { setLabel } from "../lib/format";
-import { isNavKey, moveSelection } from "../lib/nav";
+import { actingIndex, isNavKey, moveSelection } from "../lib/nav";
 import { loadPrefs, savePrefs } from "../lib/prefs";
 import type { Layout } from "../lib/prefs";
 import { parseQuery } from "../lib/query";
@@ -24,6 +24,14 @@ const hide = () => void api.hideOverlay();
 const RELEASE_COVERS_AFTER_MS = 15_000;
 /** What the grid shows while the overlay is hidden: the results stay fetched, but no cards are kept. */
 const NO_SETS: Beatmapset[] = [];
+const MODIFIER_KEYS = ["Shift", "Control", "Alt", "Meta"];
+
+/** The card under the pointer right now, by the browser's own :hover, so it is the one drawn highlighted. */
+function hoveredCardIndex(): number {
+  const card = document.querySelector<HTMLElement>(".card:hover:not(.ghost)");
+  const index = card ? Number(card.dataset.index) : -1;
+  return Number.isInteger(index) ? index : -1;
+}
 
 function tipFor(context: OverlayContext | null): string | null {
   if (!context) return null;
@@ -54,6 +62,11 @@ export default function Overlay() {
   const [layout, setLayout] = useState<Layout>(prefs.layout);
   const [panelOpen, setPanelOpen] = useState(prefs.panelOpen);
   const [selected, setSelected] = useState(-1);
+  /** The card the pointer is over (for the key hint); Enter itself asks the browser, see `hoveredCardIndex`. */
+  const [hover, setHover] = useState(-1);
+  /** When the pointer last moved and when a key was last pressed: whichever is later says what the person is doing. */
+  const pointerAt = useRef(0);
+  const keyAt = useRef(0);
   const [columns, setColumns] = useState(3);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -100,6 +113,8 @@ export default function Overlay() {
         setContext(payload);
         setVisible(true);
         setSelected(-1);
+        // A pointer left resting over a card when the overlay opens is not pointing at it yet.
+        keyAt.current = performance.now();
         void refreshInstalled();
         void reloadSettings();
         // The webview may not own keyboard focus yet when the event lands, so try twice.
@@ -140,20 +155,31 @@ export default function Overlay() {
 
   const preview = useCallback((set: Beatmapset) => togglePreview(set.id, set.preview_url), [togglePreview]);
 
-  // A search-tip example from the Filters panel is added to what is typed, ready to be edited.
-  const addToSearch = useCallback((word: string) => {
-    setParams((current) => ({ ...current, text: current.text.trim() ? `${current.text.trimEnd()} ${word}` : word }));
-    setSelected(-1);
-    inputRef.current?.focus();
-  }, []);
-
   // The filters run here on what the mirrors sent, so a rare one can leave the grid nearly empty. More pages
   // are fetched for it, but only a few at a time; "Keep searching" asks for a few more.
   const pagesTried = useRef(0);
   const [capped, setCapped] = useState(false);
-  const signature = [params.text, params.mode, params.status, params.sort, params.dir, JSON.stringify(filters)].join("|");  useEffect(() => {
+  // Dragging a slider changes the filters at every step. The grid follows at once, but the allowance for
+  // fetching more pages is only refilled when the slider has stopped, so a long drag can't keep asking the mirrors.
+  const [settledRanges, setSettledRanges] = useState(filters.ranges);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettledRanges(filters.ranges), 300);
+    return () => clearTimeout(timer);
+  }, [filters.ranges]);
+  const signature = [
+    params.text,
+    params.mode,
+    params.status,
+    params.sort,
+    params.dir,
+    JSON.stringify({ ...filters, ranges: settledRanges }),
+  ].join("|");
+  // Counts refills, so one that changes nothing on screen still makes the grid look for more results.
+  const [refills, setRefills] = useState(0);
+  useEffect(() => {
     pagesTried.current = 0;
     setCapped(false);
+    setRefills((count) => count + 1);
   }, [signature]);
 
   const narrowing = narrowsResults(filters, query);
@@ -168,7 +194,9 @@ export default function Overlay() {
     }
     if (sparse) pagesTried.current += 1;
     fetchMore();
-  }, [fetching, sparse, narrowing, sets.length, fetchMore]);
+    // `refills` is listed without being read: a new allowance has to make a new callback, which is what
+    // wakes the grid's scroll watcher into asking for more.
+  }, [fetching, sparse, narrowing, sets.length, fetchMore, refills]);
   const keepSearching = () => {
     pagesTried.current = 0;
     setCapped(false);
@@ -195,6 +223,29 @@ export default function Overlay() {
     </div>
   );
 
+  // Follows the pointer, for the key hint and for telling "pointing at a card" from "typing".
+  useEffect(() => {
+    if (!visible) {
+      setHover(-1);
+      return;
+    }
+    const onPointer = (event: PointerEvent) => {
+      pointerAt.current = event.timeStamp;
+      const card = event.target instanceof Element ? event.target.closest<HTMLElement>(".card:not(.ghost)") : null;
+      const index = card ? Number(card.dataset.index) : -1;
+      setHover(Number.isInteger(index) ? index : -1);
+    };
+    const onLeave = () => setHover(-1);
+    window.addEventListener("pointermove", onPointer);
+    window.addEventListener("pointerdown", onPointer);
+    document.documentElement.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("pointerdown", onPointer);
+      document.documentElement.removeEventListener("mouseleave", onLeave);
+    };
+  }, [visible]);
+
   useEffect(() => {
     if (!visible) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -203,9 +254,14 @@ export default function Overlay() {
         hide();
         return;
       }
+      // Was the person pointing, rather than typing, up to this key? Then note that a key was pressed.
+      const keyBefore = keyAt.current;
+      if (!MODIFIER_KEYS.includes(event.key)) keyAt.current = event.timeStamp;
       const target = event.target;
-      const inText = target instanceof HTMLInputElement && target.type !== "checkbox";
-      const inSelect = target instanceof HTMLSelectElement;
+      // A slider keeps the arrow keys for itself, the way a dropdown does.
+      const onSlider = target instanceof HTMLInputElement && target.type === "range";
+      const inText = target instanceof HTMLInputElement && target.type !== "checkbox" && !onSlider;
+      const inSelect = target instanceof HTMLSelectElement || onSlider;
       const onButton =
         target instanceof HTMLButtonElement || (target instanceof HTMLInputElement && target.type === "checkbox");
 
@@ -220,13 +276,19 @@ export default function Overlay() {
         return;
       }
 
-      const current = sets[selected];
-      if (event.key === "Enter" && current && !onButton && !inSelect) {
+      // Enter and Space act on the card under a pointer that has moved since the last key (no click needed,
+      // whatever has focus), or else on the card chosen with the arrow keys.
+      const hovered = event.key === "Enter" || event.key === " " ? hoveredCardIndex() : -1;
+      const index = actingIndex({ selected, hovered, pointerAt: pointerAt.current, keyAt: keyBefore });
+      const pointing = hovered >= 0 && index === hovered;
+      const current = sets[index];
+      if (event.key === "Enter" && current && (pointing || (!onButton && !inSelect))) {
         event.preventDefault();
-        download(current);
-      } else if (event.key === " " && current && !inText && !inSelect && !onButton) {
+        // Holding the key down must not ask for the same map again and again.
+        if (!event.repeat) download(current);
+      } else if (event.key === " " && current && !inText && (pointing || (!inSelect && !onButton))) {
         event.preventDefault();
-        togglePreview(current.id, current.preview_url);
+        if (!event.repeat) togglePreview(current.id, current.preview_url);
       } else if (!inText && !inSelect && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         // Type-to-search: any printable key sends focus back to the search box.
         focusSearch();
@@ -254,7 +316,6 @@ export default function Overlay() {
         onFilters={changeFilters}
         onLayout={setLayout}
         onPanel={setPanelOpen}
-        onExample={addToSearch}
         onClose={hide}
       />
       <div className={`loadbar${search.loading ? " on" : ""}`} aria-hidden />
@@ -268,7 +329,6 @@ export default function Overlay() {
       ) : (
         tip && <p className="hint">{tip}</p>
       )}
-      {selected >= 0 && <p className="hint keys">Enter to download · Space to preview</p>}
       <ResultsGrid
         // Prefetched results wait as data. Mounted while hidden, thirty cards would keep layout
         // and compositor layers alive (measured: about 12 MB) for a window nobody can see.
@@ -291,6 +351,12 @@ export default function Overlay() {
         onCancel={cancel}
         onPreview={preview}
       />
+      {/* Floats over the results, so showing it never moves anything. */}
+      <div className={`keyhint${visible && (selected >= 0 || hover >= 0) ? " on" : ""}`} aria-hidden>
+        <kbd>Enter</kbd> download
+        <i />
+        <kbd>Space</kbd> preview
+      </div>
       <DownloadsDrawer
         jobs={jobs}
         onCancel={cancel}

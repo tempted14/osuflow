@@ -1,5 +1,7 @@
 import { NO_QUERY, fieldsMatch, mapMatches, queryNarrows } from "./query";
 import type { NumericConstraint, ParsedQuery } from "./query";
+import { NO_RANGES, activeRangeCount, rangeConstraints } from "./ranges";
+import type { Ranges } from "./ranges";
 import type { Beatmapset, LibraryDelta, Mirror } from "./types";
 
 /** Appends a page of results, skipping sets that are already listed (mirrors can repeat them). */
@@ -81,6 +83,8 @@ export interface ClientFilters {
   spotlight: boolean;
   /** Explicit maps stay hidden unless this is on, as on the osu! website. */
   showExplicit: boolean;
+  /** The sliders: stars, AR, CS, OD, HP, BPM and length. Each one left open asks for nothing. */
+  ranges: Ranges;
 }
 
 export const NO_FILTERS: ClientFilters = {
@@ -92,11 +96,15 @@ export const NO_FILTERS: ClientFilters = {
   featured: false,
   spotlight: false,
   showExplicit: false,
+  ranges: NO_RANGES,
 };
 
-/** How many settings differ from the defaults: the number on the Filters button. */
+/** How many settings differ from the defaults (each slider that is set counts once): the number on the Filters button. */
 export function activeFilterCount(filters: ClientFilters): number {
-  return (Object.keys(NO_FILTERS) as (keyof ClientFilters)[]).filter((key) => filters[key] !== NO_FILTERS[key]).length;
+  const changed = (Object.keys(NO_FILTERS) as (keyof ClientFilters)[]).filter(
+    (key) => key !== "ranges" && filters[key] !== NO_FILTERS[key],
+  );
+  return changed.length + activeRangeCount(filters.ranges);
 }
 
 /**
@@ -143,7 +151,8 @@ export function matchesFilters(
   if (filters.featured && !set.track_id) return false;
   if (filters.spotlight && !set.spotlight) return false;
   if (!fieldsMatch(set, query.fields)) return false;
-  return hasDifficultyIn(set, filters.tier, mode, query.numeric);
+  // The sliders and the typed conditions are one list: a single difficulty has to satisfy them all.
+  return hasDifficultyIn(set, filters.tier, mode, [...rangeConstraints(filters.ranges), ...query.numeric]);
 }
 
 /**

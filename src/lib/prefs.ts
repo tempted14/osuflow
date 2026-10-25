@@ -1,3 +1,5 @@
+import { SLIDERS, sanitizeSpan } from "./ranges";
+import type { Ranges } from "./ranges";
 import { GENRES, LANGUAGES, NO_FILTERS, STATUSES, TIERS } from "./results";
 import type { ClientFilters, Tier } from "./results";
 import { SORTS, defaultDirection } from "./sorting";
@@ -39,6 +41,8 @@ export function parsePrefs(raw: string | null): Prefs {
   const flag = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
   const idIn = (value: unknown, list: { id: number }[]) =>
     typeof value === "number" && list.some((item) => item.id === value) ? value : null;
+  const savedRanges = saved.ranges && typeof saved.ranges === "object" ? (saved.ranges as Record<string, unknown>) : {};
+  const ranges = Object.fromEntries(SLIDERS.map((slider) => [slider.key, sanitizeSpan(slider, savedRanges[slider.key])])) as Ranges;
   const sort = oneOf<Sort>(data.sort, SORTS.map((option) => option.value)) ? data.sort : "relevance";
   return {
     mode: oneOf<number>(data.mode, [0, 1, 2, 3]) ? data.mode : null,
@@ -54,6 +58,7 @@ export function parsePrefs(raw: string | null): Prefs {
       featured: flag(saved.featured, NO_FILTERS.featured),
       spotlight: flag(saved.spotlight, NO_FILTERS.spotlight),
       showExplicit: flag(saved.showExplicit, NO_FILTERS.showExplicit),
+      ranges,
     },
     layout: data.layout === "cards" || data.layout === "list" ? data.layout : "list",
     panelOpen: flag(data.panelOpen, false),
