@@ -4,12 +4,15 @@ Search and download osu! beatmaps without leaving the game. Press a hotkey in os
 click a map, and a moment later it is in song select. A free take on osu!direct, built as a small
 background app for Windows 11.
 
+**Website: [osuflow.github.io](https://osuflow.github.io/)** (screenshots, a try-it demo, the FAQ and the download).
+
 > osu!flow is not affiliated with or endorsed by ppy. It uses public beatmap mirrors, never touches
 > the osu! client's memory or network, and hands maps over exactly like double-clicking an `.osz`.
 
 ## Install
 
-1. Download **osu.flow_x.y.z_x64-setup.exe** from the [Releases](../../releases) page.
+1. Download **osu.flow_x.y.z_x64-setup.exe** from the [Releases](../../releases) page (or the Download
+   button on [osuflow.github.io](https://osuflow.github.io/), which links the same file).
 2. Run it. It installs for your user only (no administrator rights) and adds a Start menu entry.
    While osu!flow is new, Windows SmartScreen may say it protects your PC: choose **More info**,
    then **Run anyway**. See the [code signing policy](#code-signing-policy) below.
