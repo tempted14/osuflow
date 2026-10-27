@@ -18,15 +18,15 @@
   --text-2: rgba(245, 244, 251, 0.72);
   --muted: rgba(245, 244, 251, 0.46);
 
-  --accent: #ff66aa;
-  --accent-gradient: linear-gradient(135deg, #ff66aa 0%, #a77bff 100%);
-  --on-accent: #1a1022;
+  --accent: #e8689b;
+  --accent-gradient: var(--accent);
+  --on-accent: #1a1a1d;
   --good: #6ee7a8;
   --bad: #ff7d8a;
   --warn: #ffd27a;
 
   /* Laid over the acrylic: gives the glass its brand colour and keeps text readable. */
-  --tint: rgba(20, 17, 31, 0.5);
+  --tint: rgba(24, 24, 27, 0.55);
   --surface: rgba(255, 255, 255, 0.045);
   --surface-hover: rgba(255, 255, 255, 0.08);
   --surface-strong: rgba(255, 255, 255, 0.12);
@@ -37,7 +37,7 @@
   --range: #8fd8ff;
   --range-soft: rgba(143, 216, 255, 0.14);
   /* Menus and floating hints: lifted off the page, and opaque enough to read over anything. */
-  --flyout: rgb(38, 34, 56);
+  --flyout: rgb(36, 36, 40);
 
   --radius-sm: 8px;
   --radius: 10px;
@@ -56,10 +56,10 @@
 }
 
 html[data-glass="off"] {
-  --tint: rgb(27, 25, 38);
-  --surface: rgb(36, 33, 50);
-  --surface-hover: rgb(46, 42, 63);
-  --surface-strong: rgb(56, 52, 76);
+  --tint: rgb(28, 28, 31);
+  --surface: rgb(37, 37, 41);
+  --surface-hover: rgb(46, 46, 51);
+  --surface-strong: rgb(56, 56, 62);
 }
 
 * {
@@ -123,7 +123,6 @@ select:hover {
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.97);
 }
 
 button:disabled {
@@ -134,13 +133,13 @@ button:disabled {
 input:focus-visible,
 select:focus-visible {
   outline: none;
-  border-color: rgba(255, 102, 170, 0.7);
-  box-shadow: 0 0 0 3px rgba(255, 102, 170, 0.18);
+  border-color: rgba(232, 104, 155, 0.7);
+  box-shadow: 0 0 0 3px rgba(232, 104, 155, 0.18);
 }
 
 /* Windows 11's keyboard focus: a crisp accent ring just outside the control, drawn only for the keyboard. */
 button:focus-visible {
-  outline: 2px solid rgba(255, 102, 170, 0.85);
+  outline: 2px solid rgba(232, 104, 155, 0.85);
   outline-offset: 1px;
 }
 
@@ -154,7 +153,7 @@ select {
 }
 
 select option {
-  background: #1e1b2c;
+  background: #242428;
   color: var(--text);
 }
 
@@ -210,7 +209,7 @@ input[type="checkbox"]:disabled {
 
 input[type="checkbox"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 102, 170, 0.3);
+  box-shadow: 0 0 0 3px rgba(232, 104, 155, 0.3);
 }
 
 .primary {
@@ -306,7 +305,6 @@ input[type="checkbox"]:focus-visible {
   border: 1px solid var(--stroke);
   border-radius: 8px;
   opacity: 0;
-  transform: translateY(8px) scale(0.99);
   transition:
     opacity var(--fast) var(--ease),
     transform var(--medium) var(--ease);
@@ -340,7 +338,7 @@ input[type="checkbox"]:focus-visible {
   color: var(--accent);
 }
 
-/* Like a Windows 11 text box: a hairline all round, and an accent line that draws in along the bottom on focus. */
+/* Like a Windows 11 text box: a hairline all round, and the accent colour on the border when focused. */
 .search {
   width: 100%;
   height: 44px;
@@ -349,13 +347,7 @@ input[type="checkbox"]:focus-visible {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-sm);
   background-color: var(--surface);
-  background-image: linear-gradient(var(--accent), var(--accent));
-  background-repeat: no-repeat;
-  background-position: center bottom;
-  background-size: 0% 2px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   transition:
-    background-size 280ms var(--ease),
     background-color var(--fast) var(--ease),
     border-color var(--fast) var(--ease);
 }
@@ -367,10 +359,8 @@ input[type="checkbox"]:focus-visible {
 .search:focus,
 .search:focus-visible {
   outline: none;
-  border-color: var(--stroke-strong);
+  border-color: var(--accent);
   background-color: var(--surface-hover);
-  background-size: calc(100% - 6px) 2px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .search::-webkit-search-cancel-button {
@@ -415,7 +405,6 @@ input[type="checkbox"]:focus-visible {
   border-radius: 50%;
   background: var(--surface-strong);
   color: var(--text-2);
-  animation: pop 160ms var(--ease) both;
 }
 
 /* What the search box understood from the text typed in it ("stars > 5"), one click to take back out. */
@@ -436,7 +425,6 @@ input[type="checkbox"]:focus-visible {
   background: var(--surface-strong);
   color: var(--text);
   font-size: 0.88rem;
-  animation: pop 180ms var(--ease) both;
 }
 
 .cond svg {
@@ -542,7 +530,6 @@ input[type="checkbox"]:focus-visible {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .menu-label {
@@ -590,11 +577,9 @@ input[type="checkbox"]:focus-visible {
   border-radius: 10px;
   background: var(--flyout);
   box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.5),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 4px 16px rgba(0, 0, 0, 0.35);
   outline: none;
   transform-origin: top left;
-  animation: flyout 160ms var(--ease) both;
 }
 
 .flyout.end {
@@ -636,7 +621,7 @@ input[type="checkbox"]:focus-visible {
   height: 14px;
   translate: 0 -50%;
   border-radius: 2px;
-  background: linear-gradient(180deg, #ff66aa, #a77bff);
+  background: var(--accent);
 }
 
 @keyframes flyout {
@@ -708,7 +693,6 @@ input[type="checkbox"]:focus-visible {
 .layout button.on {
   background: var(--surface-strong);
   color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .filters-btn {
@@ -740,7 +724,6 @@ input[type="checkbox"]:focus-visible {
   color: var(--on-accent);
   font-size: 0.74rem;
   font-weight: 700;
-  animation: pop 180ms var(--ease) both;
 }
 
 /* ---------- the filter panel ---------- */
@@ -830,7 +813,7 @@ input[type="checkbox"]:focus-visible {
 .chip.on {
   background: var(--surface-strong);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(255, 102, 170, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(232, 104, 155, 0.4);
 }
 
 /* ---------- the sliders: always shown, in one block at the bottom of the panel ---------- */
@@ -964,7 +947,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 .slider.on .slider-track::after {
-  background: linear-gradient(90deg, var(--range), #a77bff);
+  background: var(--range);
 }
 
 /* Two inputs on one track: only their handles take the mouse, so each can be grabbed on its own. */
@@ -1013,11 +996,9 @@ input[type="checkbox"]:focus-visible {
 }
 
 .slider-track input::-webkit-slider-thumb:hover {
-  transform: scale(1.14);
 }
 
 .slider-track input:active::-webkit-slider-thumb {
-  transform: scale(1.2);
   cursor: grabbing;
 }
 
@@ -1043,7 +1024,7 @@ input[type="checkbox"]:focus-visible {
   border: 1px solid var(--stroke-strong);
   border-radius: 999px;
   background: var(--flyout);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   color: var(--text-2);
   font-size: 0.84rem;
   white-space: nowrap;
@@ -1092,7 +1073,7 @@ input[type="checkbox"]:focus-visible {
   padding: 2px 7px;
   border: 1px solid var(--stroke-strong);
   border-radius: 999px;
-  background: rgba(10, 8, 18, 0.7);
+  background: rgba(10, 10, 12, 0.7);
   color: #8fd8ff;
   font-size: 0.64rem;
   font-weight: 700;
@@ -1230,8 +1211,6 @@ input[type="checkbox"]:focus-visible {
   background: var(--surface);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
-  animation: rise var(--medium) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 16ms);
   transition:
     transform var(--medium) var(--ease),
     background var(--medium) var(--ease),
@@ -1239,14 +1218,13 @@ input[type="checkbox"]:focus-visible {
 }
 
 .card:hover {
-  transform: translateY(-2px);
   background: var(--surface-hover);
   border-color: var(--stroke-strong);
 }
 
 .card.selected {
-  border-color: rgba(255, 102, 170, 0.75);
-  box-shadow: 0 0 0 1px rgba(255, 102, 170, 0.4);
+  border-color: rgba(232, 104, 155, 0.75);
+  box-shadow: 0 0 0 1px rgba(232, 104, 155, 0.4);
 }
 
 .cover {
@@ -1267,7 +1245,6 @@ input[type="checkbox"]:focus-visible {
 }
 
 .card:hover .cover img {
-  transform: scale(1.05);
 }
 
 .card.installed .cover img {
@@ -1377,7 +1354,6 @@ input[type="checkbox"]:focus-visible {
 }
 
 .dot:hover {
-  transform: scale(1.35);
 }
 
 .more {
@@ -1452,17 +1428,10 @@ button.action.busy:hover:not(:disabled) {
 /* Placeholder cards while the first results load. The sweep is a compositor-only transform. */
 .card.ghost {
   min-height: 210px;
-  animation: rise var(--medium) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
 .card.ghost::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.07) 50%, transparent 80%);
-  transform: translateX(-100%);
-  animation: sweep 1.4s var(--ease) infinite;
+  display: none;
 }
 
 /* ---------- downloads ---------- */
@@ -1484,18 +1453,18 @@ button.action.busy:hover:not(:disabled) {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text);
-  background: rgb(30, 26, 44);
+  background: rgb(30, 30, 34);
   border: 1px solid var(--stroke-strong);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .dl-pill:hover:not(:disabled) {
-  background: rgb(40, 35, 58);
+  background: rgb(42, 42, 47);
 }
 
 .dl-pill.busy {
-  border-color: rgba(255, 102, 170, 0.6);
-  background: linear-gradient(to right, rgba(255, 102, 170, 0.55) var(--fill, 0%), rgb(30, 26, 44) var(--fill, 0%));
+  border-color: rgba(232, 104, 155, 0.6);
+  background: linear-gradient(to right, rgba(232, 104, 155, 0.55) var(--fill, 0%), rgb(30, 30, 34) var(--fill, 0%));
 }
 
 .dl-pill.failed {
@@ -1515,11 +1484,10 @@ button.action.busy:hover:not(:disabled) {
   width: 300px;
   max-height: 230px;
   overflow-y: auto;
-  background: rgba(24, 21, 36, 0.96);
+  background: rgba(28, 28, 32, 0.97);
   border: 1px solid var(--stroke-strong);
   border-radius: var(--radius);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
-  animation: rise var(--medium) var(--ease) both;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 html[data-glass="off"] .dl-panel {
@@ -1632,7 +1600,6 @@ html[data-glass="off"] .dl-panel {
   max-width: 460px;
   margin: 0 auto;
   padding: 20px 26px 24px;
-  animation: rise var(--slow) var(--ease) both;
 }
 
 .hero {
@@ -1675,7 +1642,6 @@ html[data-glass="off"] .dl-panel {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   transition: background var(--fast) var(--ease);
 }
 
@@ -1768,7 +1734,6 @@ label.setting:hover {
   border: 1px solid var(--stroke);
   border-left: 3px solid var(--accent);
   border-radius: 8px;
-  animation: rise var(--slow) var(--ease) both;
   transition: border-color var(--medium) var(--ease);
 }
 
