@@ -29,6 +29,10 @@ import {
   matchesFilters,
   mergeResults,
   narrowsResults,
+  DEFAULT_STATUSES,
+  isDefaultStatuses,
+  statusSummary,
+  toggleStatus,
   parseBeatmapReference,
   planFetch,
   searchKey,
@@ -226,7 +230,7 @@ describe("sorting", () => {
   });
 
   it("keys a search by its direction, except for best match, which has none", () => {
-    const base = { text: "x", mode: null, status: 1, sort: "plays" };
+    const base = { text: "x", mode: null, statuses: [1], sort: "plays" };
     expect(searchKey({ ...base, dir: "desc" })).not.toBe(searchKey({ ...base, dir: "asc" }));
     const relevance = { ...base, sort: "relevance" };
     expect(searchKey({ ...relevance, dir: "asc" })).toBe(searchKey({ ...relevance, dir: "desc" }));
@@ -347,7 +351,7 @@ describe("remembered preferences", () => {
   it("start from the defaults when nothing is saved or the saved text is garbage", () => {
     for (const raw of [null, "", "not json", "[]", "42", "null"]) {
       const prefs = parsePrefs(raw);
-      expect(prefs.status).toBe(1);
+      expect(prefs.statuses).toEqual([1]);
       expect(prefs.sort).toBe("relevance");
       expect(prefs.filters).toEqual(NO_FILTERS);
       expect(prefs.layout).toBe("list");
@@ -357,7 +361,7 @@ describe("remembered preferences", () => {
 
   it("round-trip what was saved", () => {
     const saved = {
-      mode: 3, status: 4, sort: "bpm", dir: "asc", layout: "cards", panelOpen: true,
+      mode: 3, statuses: [1, 4], sort: "bpm", dir: "asc", layout: "cards", panelOpen: true,
       filters: { ...NO_FILTERS, tier: "insane", genre: 10, language: 3, video: true, featured: true, showExplicit: true },
     };
     expect(parsePrefs(JSON.stringify(saved))).toEqual(saved);
@@ -365,11 +369,11 @@ describe("remembered preferences", () => {
 
   it("drop a bad value on its own without losing the rest", () => {
     const prefs = parsePrefs(JSON.stringify({
-      mode: 9, status: 77, sort: "popularity", dir: "sideways", layout: "mosaic", panelOpen: "yes",
+      mode: 9, statuses: [77, "x"], sort: "popularity", dir: "sideways", layout: "mosaic", panelOpen: "yes",
       filters: { tier: "godlike", genre: 999, language: "english", video: "true", storyboard: true },
     }));
     expect(prefs.mode).toBeNull();
-    expect(prefs.status).toBe(1);
+    expect(prefs.statuses).toEqual([1]);
     expect(prefs.sort).toBe("relevance");
     expect(prefs.layout).toBe("list");
     expect(prefs.panelOpen).toBe(false);
@@ -472,17 +476,23 @@ describe("results", () => {
 });
 
 describe("when the overlay's search fetches", () => {
-  const key = searchKey({ text: "freedom dive", mode: null, status: 1, sort: "relevance" });
+  const key = searchKey({ text: "freedom dive", mode: null, statuses: [1], sort: "relevance" });
   const situation = (patch: Partial<FetchSituation> = {}): FetchSituation => ({
     enabled: true, typing: false, last: null, inFlightKey: null, key, now: 100_000, hadError: false, ...patch,
   });
 
   it("treats the same query the way the backend does", () => {
-    const base = { text: "Freedom Dive", mode: null, status: 1, sort: "relevance" };
+    const base = { text: "Freedom Dive", mode: null, statuses: [1], sort: "relevance" };
     expect(searchKey({ ...base, text: "  freedom dive " })).toBe(searchKey(base));
     expect(searchKey({ ...base, mode: 0 })).not.toBe(searchKey(base));
-    expect(searchKey({ ...base, status: 4 })).not.toBe(searchKey(base));
+    expect(searchKey({ ...base, statuses: [4] })).not.toBe(searchKey(base));
     expect(searchKey({ ...base, sort: "plays" })).not.toBe(searchKey(base));
+  });
+
+  it("keys the same set of categories the same way whatever order they were ticked in", () => {
+    const base = { text: "x", mode: null, sort: "relevance" };
+    expect(searchKey({ ...base, statuses: [4, 1] })).toBe(searchKey({ ...base, statuses: [1, 4] }));
+    expect(searchKey({ ...base, statuses: [1, 4] })).not.toBe(searchKey({ ...base, statuses: [1] }));
   });
 
   it("fetches the first results while the overlay is still hidden, once", () => {
@@ -640,5 +650,47 @@ describe("the cache of recent searches", () => {
     cache.set("a", page(0, [1]));
     cache.set("a", page(5, [2, 3]));
     expect(cache.get("a", 6)?.results.map((s) => s.id)).toEqual([2, 3]);
+  });
+});
+
+describe("searching in several categories at once", () => {
+  it("adds and removes a category, keeping the menu's order", () => {
+    expect(toggleStatus([1], 4)).toEqual([1, 4]);
+    expect(toggleStatus([4], 1)).toEqual([1, 4]);
+    expect(toggleStatus([1, 4, -1], 4)).toEqual([1, -1]);
+    expect(toggleStatus([1], -2)).toEqual([1, -2]);
+  });
+
+  it("never lets the last one go, because a search has to ask for something", () => {
+    expect(toggleStatus([1], 1)).toEqual([1]);
+    expect(toggleStatus([4], 4)).toEqual([4]);
+  });
+
+  it("says on the button what is ticked", () => {
+    expect(statusSummary([1])).toBe("Ranked");
+    expect(statusSummary([1, 4])).toBe("Ranked, Loved");
+    expect(statusSummary([1, 4, 3])).toBe("3 selected");
+    expect(statusSummary([-2, -1, 0, 1, 3, 4])).toBe("6 selected");
+    expect(statusSummary([])).toBe("Ranked");
+  });
+
+  it("knows the default is ranked alone", () => {
+    expect(isDefaultStatuses([1])).toBe(true);
+    expect(isDefaultStatuses([1, 4])).toBe(false);
+    expect(isDefaultStatuses([4])).toBe(false);
+    expect([...DEFAULT_STATUSES]).toEqual([1]);
+  });
+
+  it("reads a category list that was saved, in the menu's order and without repeats or unknowns", () => {
+    expect(parsePrefs(JSON.stringify({ statuses: [4, 1, 4, 99] })).statuses).toEqual([1, 4]);
+    expect(parsePrefs(JSON.stringify({ statuses: [] })).statuses).toEqual([1]);
+    expect(parsePrefs(JSON.stringify({ statuses: "ranked" })).statuses).toEqual([1]);
+  });
+
+  it("still reads the single category an older version saved", () => {
+    expect(parsePrefs(JSON.stringify({ status: 4 })).statuses).toEqual([4]);
+    expect(parsePrefs(JSON.stringify({ status: 77 })).statuses).toEqual([1]);
+    // A list wins over the old field when both are there.
+    expect(parsePrefs(JSON.stringify({ status: 4, statuses: [1, 3] })).statuses).toEqual([1, 3]);
   });
 });

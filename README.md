@@ -29,8 +29,8 @@ the browser registration, if you turned either on.
   pointer (or a pen, on a tablet) over a map and press `Enter` to download it or `Space` to
   preview it. It acts on the map under the pointer once the pointer has moved since your last key press,
   so typing a search and pressing `Enter` never downloads whatever happens to sit under the cursor.
-- **Browse like the osu! website:** pick a game mode on the sliding switch and what to *Show* (ranked,
-  loved, qualified, pending, WIP, graveyard) from its drop-down, then one of ten sort orders (ranked date, last updated, submitted, plays,
+- **Browse like the osu! website:** pick a game mode on the sliding switch and what to *Show*: tick any of
+  ranked, loved, qualified, pending, WIP and graveyard, in any combination, and the search covers them all, then one of ten sort orders (ranked date, last updated, submitted, plays,
   favourites, stars, BPM, length, title, artist). The button beside the menu says which way it runs
   ("Newest first", "Hardest first", "A to Z") and reverses it. Switch between a list (wide rows with a
   small cover) and cards. Your choices are remembered.

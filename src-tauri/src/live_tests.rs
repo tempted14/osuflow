@@ -56,7 +56,7 @@ async fn live_search_works_on_every_mirror() {
 #[ignore = "uses the network"]
 async fn live_status_and_mode_filters_are_honoured() {
     for mirror in MirrorId::ALL {
-        let query = SearchQuery { status: 4, mode: Some(3), limit: 10, ..SearchQuery::default() };
+        let query = SearchQuery { statuses: vec![4], mode: Some(3), limit: 10, ..SearchQuery::default() };
         let response = only(mirror)
             .search(&[mirror], &query)
             .await

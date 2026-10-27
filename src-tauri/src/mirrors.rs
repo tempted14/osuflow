@@ -141,8 +141,8 @@ pub struct SearchQuery {
     pub query: String,
     /// 0 osu!, 1 taiko, 2 catch, 3 mania; `None` for every mode.
     pub mode: Option<u8>,
-    /// osu! API status: -2 graveyard, -1 wip, 0 pending, 1 ranked, 2 approved, 3 qualified, 4 loved.
-    pub status: i8,
+    /// osu! API statuses to search in (several at once): -2 graveyard, -1 wip, 0 pending, 1 ranked, 2 approved, 3 qualified, 4 loved.
+    pub statuses: Vec<i8>,
     pub sort: Sort,
     /// Which way to sort; `None` means the sort's usual direction (see `Sort::default_direction`).
     pub direction: Option<SortDirection>,
@@ -155,7 +155,7 @@ impl Default for SearchQuery {
         Self {
             query: String::new(),
             mode: None,
-            status: 1,
+            statuses: vec![1],
             sort: Sort::Relevance,
             direction: None,
             offset: 0,
@@ -170,12 +170,25 @@ impl SearchQuery {
         SearchQuery {
             query: self.query.trim().to_string(),
             mode: self.mode.filter(|m| *m <= 3),
-            status: if (-2..=4).contains(&self.status) { self.status } else { 1 },
+            statuses: self.normalized_statuses(),
             sort: self.sort,
             direction: self.direction,
             offset: self.offset,
             limit: self.limit.clamp(1, MAX_PAGE),
         }
+    }
+
+    /// The valid statuses, each once and in order; ranked alone if there are none, which the mirrors would otherwise answer differently.
+    fn normalized_statuses(&self) -> Vec<i8> {
+        let mut statuses: Vec<i8> = self.statuses.iter().copied().filter(|s| (-2..=4).contains(s)).collect();
+        statuses.sort_unstable();
+        statuses.dedup();
+        if statuses.is_empty() { vec![1] } else { statuses }
+    }
+
+    /// The statuses as the mirrors take them: a comma-separated list (checked with both).
+    fn status_param(&self) -> String {
+        self.statuses.iter().map(i8::to_string).collect::<Vec<_>>().join(",")
     }
 
     /// osu.direct sorts with Meilisearch `<field>:<direction>` expressions; `None` for relevance.
@@ -190,7 +203,7 @@ impl SearchQuery {
             "{}\u{1f}{:?}\u{1f}{}\u{1f}{:?}\u{1f}{}\u{1f}{}",
             self.query.to_lowercase(),
             self.mode,
-            self.status,
+            self.status_param(),
             // The expression, not the two parts: "title" and "title ascending" are the same search.
             self.sort_expr(),
             self.offset,
@@ -298,7 +311,7 @@ impl MirrorSet {
             if let Some(mode) = query.mode {
                 pairs.append_pair("mode", &mode.to_string());
             }
-            pairs.append_pair("status", &query.status.to_string());
+            pairs.append_pair("status", &query.status_param());
             let page_param = match mirror {
                 MirrorId::Catboy => "limit",
                 MirrorId::OsuDirect => "amount",
@@ -310,6 +323,11 @@ impl MirrorSet {
             {
                 pairs.append_pair("sort", &expr);
             }
+        }
+        // The list of statuses has to go out with plain commas: catboy.best does not decode %2C (it then finds
+        // nothing), and every server reads a comma inside a query value the same either way.
+        if let Some(query) = url.query().map(|q| q.replace("%2C", ",")) {
+            url.set_query(Some(&query));
         }
         url
     }
@@ -512,7 +530,7 @@ mod tests {
         let q = SearchQuery {
             query: "freedom dive".into(),
             mode: Some(0),
-            status: 1,
+            statuses: vec![1],
             sort: Sort::Plays,
             direction: None,
             offset: 50,
@@ -526,6 +544,26 @@ mod tests {
             set.search_url(MirrorId::OsuDirect, &q).as_str(),
             "http://o.test/api/v2/search?q=freedom+dive&mode=0&status=1&amount=25&offset=50&sort=play_count%3Adesc"
         );
+    }
+
+    #[test]
+    fn several_statuses_go_out_as_a_plain_comma_list_for_both_mirrors() {
+        let set = MirrorSet::with_bases("http://c.test", "http://o.test/");
+        let q = SearchQuery { statuses: vec![4, 1, 1], ..SearchQuery::default() }.normalized();
+        assert_eq!(q.statuses, vec![1, 4]);
+        for mirror in MirrorId::ALL {
+            let url = set.search_url(mirror, &q);
+            assert!(url.as_str().contains("status=1,4"), "{url}");
+            assert!(!url.as_str().contains("%2C"), "{url}");
+        }
+    }
+
+    #[test]
+    fn the_same_statuses_in_any_order_are_one_cached_search() {
+        let a = SearchQuery { statuses: vec![4, 1], ..SearchQuery::default() }.normalized();
+        let b = SearchQuery { statuses: vec![1, 4], ..SearchQuery::default() }.normalized();
+        assert_eq!(a.cache_key(), b.cache_key());
+        assert_ne!(a.cache_key(), SearchQuery::default().normalized().cache_key());
     }
 
     #[test]
@@ -605,9 +643,9 @@ mod tests {
 
     #[test]
     fn normalized_clamps_what_mirrors_would_reject() {
-        let q = SearchQuery { query: "  hi ".into(), mode: Some(9), status: 42, limit: 500, ..SearchQuery::default() }
+        let q = SearchQuery { query: "  hi ".into(), mode: Some(9), statuses: vec![42, 4, 4, -9], limit: 500, ..SearchQuery::default() }
             .normalized();
-        assert_eq!((q.query.as_str(), q.mode, q.status, q.limit), ("hi", None, 1, MAX_PAGE));
+        assert_eq!((q.query.as_str(), q.mode, q.statuses.as_slice(), q.limit), ("hi", None, &[4i8][..], MAX_PAGE));
         assert_eq!(SearchQuery { limit: 0, ..SearchQuery::default() }.normalized().limit, 1);
     }
 

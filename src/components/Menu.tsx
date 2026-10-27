@@ -12,14 +12,21 @@ export interface MenuOption<T> {
  * and a flyout list under it. It stands in for the browser's own <select>, whose pop-up can't be styled.
  * The list takes keyboard focus while it is open, so its keys (arrows, Home, End, Enter, Esc, letters)
  * never reach the results behind it.
+ *
+ * It picks one entry (`value` and `onChange`; choosing closes it) or ticks several (`values`, `summary`
+ * for the button, and `onToggle`; it stays open so more can be ticked, and Esc or a click away closes it).
  */
 export function Menu<T extends string | number>(props: {
   label: string;
   options: readonly MenuOption<T>[];
-  value: T;
-  onChange: (value: T) => void;
+  value?: T;
+  onChange?: (value: T) => void;
+  values?: readonly T[];
+  summary?: string;
+  onToggle?: (value: T) => void;
 }) {
-  const { label, options, value } = props;
+  const { label, options, value, values } = props;
+  const multiple = values !== undefined;
   const [open, setOpen] = useState(false);
   const [hot, setHot] = useState(0);
   const root = useRef<HTMLDivElement>(null);
@@ -27,7 +34,8 @@ export function Menu<T extends string | number>(props: {
   const list = useRef<HTMLUListElement>(null);
   const typed = useRef({ text: "", at: 0 });
   const id = useId();
-  const selected = Math.max(0, options.findIndex((option) => option.value === value));
+  const ticked = (option: MenuOption<T>) => (multiple ? values.includes(option.value) : option.value === value);
+  const selected = Math.max(0, options.findIndex(ticked));
 
   const show = () => {
     setHot(selected);
@@ -38,7 +46,11 @@ export function Menu<T extends string | number>(props: {
     if (refocus) trigger.current?.focus();
   };
   const choose = (index: number) => {
-    props.onChange(options[index].value);
+    if (multiple) {
+      props.onToggle?.(options[index].value);
+      return;
+    }
+    props.onChange?.(options[index].value);
     close(true);
   };
 
@@ -116,7 +128,7 @@ export function Menu<T extends string | number>(props: {
         onKeyDown={onTriggerKey}
       >
         <span className="menu-label">{label}</span>
-        <span className="menu-value">{options[selected]?.label}</span>
+        <span className="menu-value">{multiple ? props.summary : options[selected]?.label}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="m6 9 6 6 6-6" />
         </svg>
@@ -127,6 +139,7 @@ export function Menu<T extends string | number>(props: {
           id={id}
           className={`flyout${alignEnd ? " end" : ""}`}
           role="listbox"
+          aria-multiselectable={multiple || undefined}
           tabIndex={-1}
           aria-label={label}
           aria-activedescendant={`${id}-${hot}`}
@@ -137,12 +150,13 @@ export function Menu<T extends string | number>(props: {
               key={String(option.value)}
               id={`${id}-${index}`}
               role="option"
-              aria-selected={index === selected}
-              className={`flyout-item${index === hot ? " hot" : ""}${index === selected ? " on" : ""}`}
+              aria-selected={ticked(option)}
+              className={`flyout-item${index === hot ? " hot" : ""}${ticked(option) ? (multiple ? " ticked" : " on") : ""}`}
               onPointerMove={() => setHot(index)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(index)}
             >
+              {multiple && <span className="tick" aria-hidden />}
               {option.label}
             </li>
           ))}

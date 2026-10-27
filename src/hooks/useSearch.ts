@@ -8,7 +8,8 @@ export interface SearchParams {
   text: string;
   /** 0 osu!, 1 taiko, 2 catch, 3 mania; null for every mode. */
   mode: number | null;
-  status: number;
+  /** osu! API statuses to search in, several at once. */
+  statuses: number[];
   sort: Sort;
   dir: SortDirection;
 }
@@ -79,7 +80,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
   const inFlight = useRef<string | null>(null);
   /** Recent first pages, so returning to a search already made shows it with no wait. */
   const [pages] = useState(() => new PageCache());
-  const key = searchKey({ text: params.text, mode: params.mode, status: params.status, sort: params.sort, dir: params.dir });
+  const key = searchKey({ text: params.text, mode: params.mode, statuses: params.statuses, sort: params.sort, dir: params.dir });
 
   const fetchPage = useCallback(
     async (offset: number, forGeneration: number) => {
@@ -91,7 +92,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
           : await api.search({
               query: params.text,
               mode: params.mode,
-              status: params.status,
+              statuses: params.statuses,
               sort: params.sort,
               direction: params.sort === "relevance" ? null : params.dir,
               offset,
@@ -123,7 +124,7 @@ export function useSearch(params: SearchParams, enabled: boolean) {
         setState((current) => ({ ...current, loading: false, error: String(error), failedOffset: offset }));
       }
     },
-    [params.text, params.mode, params.status, params.sort, params.dir, key, pages],
+    [params.text, params.mode, params.statuses, params.sort, params.dir, key, pages],
   );
 
   // A new query, the overlay opening, or the app starting: fetch the first page when it is

@@ -10,7 +10,8 @@ export type Layout = "cards" | "list";
 /** How the overlay remembers you like to browse between runs. What you typed is never kept. */
 export interface Prefs {
   mode: number | null;
-  status: number;
+  /** The categories searched, ranked by default. */
+  statuses: number[];
   sort: Sort;
   dir: SortDirection;
   filters: ClientFilters;
@@ -43,10 +44,14 @@ export function parsePrefs(raw: string | null): Prefs {
     typeof value === "number" && list.some((item) => item.id === value) ? value : null;
   const savedRanges = saved.ranges && typeof saved.ranges === "object" ? (saved.ranges as Record<string, unknown>) : {};
   const ranges = Object.fromEntries(SLIDERS.map((slider) => [slider.key, sanitizeSpan(slider, savedRanges[slider.key])])) as Ranges;
+  // Older versions saved one `status`; a list is read first, and anything unusable falls back to ranked.
+  const knownStatuses = STATUSES.map(([, value]) => value);
+  const listed = Array.isArray(data.statuses) ? knownStatuses.filter((id) => (data.statuses as unknown[]).includes(id)) : [];
+  const statuses = listed.length > 0 ? listed : oneOf<number>(data.status, knownStatuses) ? [data.status] : [1];
   const sort = oneOf<Sort>(data.sort, SORTS.map((option) => option.value)) ? data.sort : "relevance";
   return {
     mode: oneOf<number>(data.mode, [0, 1, 2, 3]) ? data.mode : null,
-    status: oneOf<number>(data.status, STATUSES.map(([, value]) => value)) ? data.status : 1,
+    statuses,
     sort,
     dir: data.dir === "asc" || data.dir === "desc" ? data.dir : defaultDirection(sort),
     filters: {

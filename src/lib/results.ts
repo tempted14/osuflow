@@ -33,6 +33,27 @@ export const STATUSES: [string, number][] = [
   ["Graveyard", -2],
 ];
 
+/** Adds or removes a category, keeping them in the menu's order. The last one stays: a search always asks for something. */
+export function toggleStatus(current: readonly number[], value: number): number[] {
+  const has = current.includes(value);
+  if (has && current.length === 1) return [...current];
+  const order = STATUSES.map(([, id]) => id);
+  const next = has ? current.filter((id) => id !== value) : [...current, value];
+  return next.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+}
+
+/** What the Show button says: the category, two of them, or how many. */
+export function statusSummary(statuses: readonly number[]): string {
+  const names = STATUSES.filter(([, id]) => statuses.includes(id)).map(([name]) => name);
+  if (names.length === 0) return STATUSES[0][0];
+  return names.length <= 2 ? names.join(", ") : `${names.length} selected`;
+}
+
+/** Only ranked, which is what a search asks for until it is told otherwise. */
+export const DEFAULT_STATUSES: readonly number[] = [1];
+
+export const isDefaultStatuses = (statuses: readonly number[]): boolean => statuses.length === 1 && statuses[0] === 1;
+
 /** osu!'s own genre ids, in the order its website lists them (checked against real mirror results). */
 export const GENRES: { id: number; label: string }[] = [
   { id: 1, label: "Unspecified" },
@@ -202,13 +223,13 @@ export interface FetchRecord {
 export function searchKey(params: {
   text: string;
   mode: number | null;
-  status: number;
+  statuses: readonly number[];
   sort: string;
   dir?: string;
 }): string {
   // Relevance has no direction, so flipping it must not count as a new search.
   const dir = params.sort === "relevance" ? null : (params.dir ?? null);
-  return JSON.stringify([params.text.trim().toLowerCase(), params.mode, params.status, params.sort, dir]);
+  return JSON.stringify([params.text.trim().toLowerCase(), params.mode, [...params.statuses].sort((a, b) => a - b), params.sort, dir]);
 }
 
 /** A first page of results as the search handed it over. */

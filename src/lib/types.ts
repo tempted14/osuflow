@@ -86,7 +86,7 @@ export interface SearchQuery {
   /** 0 osu!, 1 taiko, 2 catch, 3 mania; null for all modes. */
   mode: number | null;
   /** -2 graveyard, -1 wip, 0 pending, 1 ranked, 2 approved, 3 qualified, 4 loved. */
-  status: number;
+  statuses: number[];
   sort: Sort;
   /** Which way to sort; null for relevance, which has no direction. */
   direction: SortDirection | null;

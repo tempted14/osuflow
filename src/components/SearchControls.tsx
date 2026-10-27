@@ -3,7 +3,7 @@ import type { SearchParams } from "../hooks/useSearch";
 import type { Layout } from "../lib/prefs";
 import { withoutChip } from "../lib/query";
 import type { ParsedQuery } from "../lib/query";
-import { STATUSES, activeFilterCount } from "../lib/results";
+import { STATUSES, activeFilterCount, statusSummary, toggleStatus } from "../lib/results";
 import type { ClientFilters } from "../lib/results";
 import { SORTS, defaultDirection, directionWords, reverse } from "../lib/sorting";
 import type { Settings, Sort } from "../lib/types";
@@ -131,7 +131,13 @@ export function SearchControls(props: {
       <div className="toolbar">
         <Segmented label="Game mode" options={MODES} value={params.mode} onChange={(mode) => props.onChange({ mode })} />
         <i className="vsep" aria-hidden />
-        <Menu label="Show" options={STATUS_OPTIONS} value={params.status} onChange={(status) => props.onChange({ status })} />
+        <Menu
+          label="Show"
+          options={STATUS_OPTIONS}
+          values={params.statuses}
+          summary={statusSummary(params.statuses)}
+          onToggle={(status) => props.onChange({ statuses: toggleStatus(params.statuses, status) })}
+        />
         <Menu
           label="Sort"
           options={SORT_OPTIONS}

@@ -607,6 +607,42 @@ input[type="checkbox"]:focus-visible {
 }
 
 /* The current choice carries Windows 11's little accent bar. */
+/* Several can be ticked: a box in front of each entry, filled when it is on. */
+.flyout-item.ticked {
+  color: var(--text);
+}
+
+.flyout-item .tick {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 4px;
+}
+
+.flyout-item.ticked .tick {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.flyout-item.ticked .tick::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.flyout-item:has(.tick) {
+  padding-left: 12px;
+}
+
 .flyout-item.on {
   color: var(--text);
   font-weight: 600;

@@ -15,7 +15,7 @@ import { actingIndex, isNavKey, moveSelection } from "../lib/nav";
 import { loadPrefs, savePrefs } from "../lib/prefs";
 import type { Layout } from "../lib/prefs";
 import { parseQuery } from "../lib/query";
-import { FILTER_WANT, NO_FILTERS, activeFilterCount, keepPaging, narrowsResults, visibleResults } from "../lib/results";
+import { DEFAULT_STATUSES, FILTER_WANT, NO_FILTERS, activeFilterCount, isDefaultStatuses, keepPaging, narrowsResults, visibleResults } from "../lib/results";
 import type { ClientFilters } from "../lib/results";
 import type { Beatmapset, OverlayContext } from "../lib/types";
 
@@ -54,7 +54,7 @@ export default function Overlay() {
   const [params, setParams] = useState<SearchParams>(() => ({
     text: "",
     mode: prefs.mode,
-    status: prefs.status,
+    statuses: prefs.statuses,
     sort: prefs.sort,
     dir: prefs.dir,
   }));
@@ -99,8 +99,8 @@ export default function Overlay() {
   );
 
   useEffect(() => {
-    savePrefs({ mode: params.mode, status: params.status, sort: params.sort, dir: params.dir, filters, layout, panelOpen });
-  }, [params.mode, params.status, params.sort, params.dir, filters, layout, panelOpen]);
+    savePrefs({ mode: params.mode, statuses: params.statuses, sort: params.sort, dir: params.dir, filters, layout, panelOpen });
+  }, [params.mode, params.statuses, params.sort, params.dir, filters, layout, panelOpen]);
 
   const focusSearch = useCallback((selectAll = false) => {
     inputRef.current?.focus();
@@ -169,7 +169,7 @@ export default function Overlay() {
   const signature = [
     params.text,
     params.mode,
-    params.status,
+    params.statuses.join(","),
     params.sort,
     params.dir,
     JSON.stringify({ ...filters, ranges: settledRanges }),
@@ -203,7 +203,7 @@ export default function Overlay() {
     fetchMore();
   };
 
-  const filtersOn = activeFilterCount(filters) > 0 || params.status !== 1 || params.mode !== null;
+  const filtersOn = activeFilterCount(filters) > 0 || !isDefaultStatuses(params.statuses) || params.mode !== null;
   const empty = (
     <div className="notice empty">
       <strong>No maps found</strong>
@@ -213,7 +213,7 @@ export default function Overlay() {
       {filtersOn && (
         <button
           onClick={() => {
-            changeParams({ status: 1, mode: null });
+            changeParams({ statuses: [...DEFAULT_STATUSES], mode: null });
             setFilters(NO_FILTERS);
           }}
         >
