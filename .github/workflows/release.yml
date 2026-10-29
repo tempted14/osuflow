@@ -67,6 +67,7 @@ jobs:
         with:
           workspaces: src-tauri
           key: ${{ matrix.target }}
+          cache-on-failure: true
       - name: Check the tag matches the version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -81,10 +82,10 @@ jobs:
       - name: Frontend tests
         run: npm test
       - name: Backend tests
-        run: cargo test --lib --locked
+        run: cargo test --lib --locked --target ${{ matrix.target }}
         working-directory: src-tauri
       - name: Rust checks
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
         working-directory: src-tauri
       - name: Build installers
         run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}

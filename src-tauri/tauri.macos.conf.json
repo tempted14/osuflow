@@ -44,8 +44,7 @@
         "focus": false,
         "focusable": false
       }
-    ],
-    "macOSPrivateApi": true
+    ]
   },
   "bundle": {
     "targets": [
