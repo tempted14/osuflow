@@ -2,7 +2,7 @@
 
 osu!flow is one desktop app with a **Game client** choice in Settings. The normal Windows installer remains available; Linux has a separate AppImage and Debian package. Both modes use the same search, previews, filters, shortcut, Skip videos option and downloads. Stable remains the default for existing settings. Changing clients preserves each client's separate paths and launch settings.
 
-Version 3.4.0 is a preview. Linux/macOS integration and the new lazer path still need confirmation with real games. Test installers are attached to successful **Release** workflow runs for the review branch; they are not a published release yet.
+Version 3.4.0 is a preview. Linux/macOS integration and the new lazer path still need confirmation with real games. Installers are available from the [3.4.0 experimental release](https://github.com/tempted14/osuflow/releases/tag/v3.4.0). Choose the Windows setup, Linux AppImage/deb, or the matching Mac architecture. These builds are unsigned.
 
 ## osu! stable on Windows
 
@@ -35,7 +35,7 @@ Advanced custom launch commands run directly as an executable and argument list,
 
 Automated tests use fake launchers and temporary libraries. Headless UI checks mock native commands and file pickers. They never start the installed game or download real maps into a player's library.
 
-Before publishing, test each offered platform with its actual installer: installation/uninstallation, client switching, shortcut or Wayland CLI, search/preview, one intentionally chosen map import, recovery after a missing launcher, and library updates. Check fullscreen visibility and focus separately. No Linux/macOS tester is available yet.
+Before treating a configuration as confirmed, test it with its actual installer: installation/uninstallation, client switching, shortcut or Wayland CLI, search/preview, one intentionally chosen map import, recovery after a missing launcher, and library updates. Check fullscreen visibility and focus separately. No Linux/macOS tester is available yet.
 
 Implementation references checked on October 29, 2026:
 

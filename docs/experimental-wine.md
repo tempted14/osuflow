@@ -2,7 +2,7 @@
 
 Version 3.4.0 adds an experimental Wine path. **It still needs testing on real Linux and macOS machines.** CI builds and unit tests do not confirm that an overlay works above a game, that a Wine wrapper accepts an archive, or that an installer works on a particular desktop. The app now also has a separate native osu!lazer mode; see the [client setup guide](client-setup.md). This page covers stable through Wine.
 
-Until a release is published, test installers are attached to successful runs of the repository's **Release** workflow on the `codex/wine-platform-support` branch. The website continues to offer the released Windows version.
+Download the newest [3.4.0 experimental release](https://github.com/tempted14/osuflow/releases/tag/v3.4.0) from the release page or website. It includes Windows setup, Linux AppImage/deb, and both Mac architectures. The Windows build also has the stable/lazer client choice.
 
 ## Install and choose the game
 
@@ -41,9 +41,9 @@ The hand-off checks whether osu! consumes the archive. If launching fails or the
 - Fullscreen visibility, game focus, tray integration and Wine file associations differ across desktops and wrappers. No Linux/macOS configuration is confirmed yet.
 - Beatmap link-handler registration is hidden and disabled outside Windows in this version.
 - **Start at login** creates a user `.desktop` autostart entry on Linux or a user LaunchAgent plist on macOS. Changes take effect at the next login; the app must stay at the saved path.
-- CI runs frontend tests, backend tests and Rust checks on Windows, Ubuntu and macOS, then builds Windows NSIS, Linux AppImage/deb, and both macOS disk images. Native UI and game imports are not automated.
+- CI runs frontend tests, backend tests and Rust checks on Windows, Ubuntu and macOS, then builds Windows NSIS, Linux AppImage/deb, and both macOS disk images. The built Linux AppImage also opens in an isolated CI desktop and its Settings screenshot is reviewed. Real game imports, installation/uninstallation and fullscreen behavior are not automated.
 
-Before publishing, a tester on each offered platform should record the installer/architecture, OS and desktop, Wine wrapper/version and whether these work:
+To confirm a configuration, a tester on each offered platform should record the installer/architecture, OS and desktop, Wine wrapper/version and whether these work:
 
 - [ ] Install, launch and quit without starting a second copy.
 - [ ] Open search using the hotkey or Wayland `--toggle`, both with and without osu! running.
