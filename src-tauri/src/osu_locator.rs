@@ -6,7 +6,6 @@ use crate::settings::Settings;
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -34,13 +33,17 @@ pub struct OsuInstall {
 /// install folder. osu!lazer is skipped: it is also called `osu!.exe`.
 pub fn detect(settings: &Settings) -> Option<OsuInstall> {
     let songs_override = settings.songs_dir.clone();
-    let username = std::env::var("USERNAME").ok();
+    let username = std::env::var(if cfg!(windows) { "USERNAME" } else { "USER" }).ok();
     let build = |exe: PathBuf, source: DetectSource| {
-        build_install(exe, songs_override.clone(), source, username.as_deref())
+        build_install(exe, songs_override.clone(), source, username.as_deref(), settings.wine_prefix.as_deref())
     };
 
-    if let Some(exe) = settings.osu_exe_path.clone().filter(|p| p.is_file()) {
+    if let Some(exe) = settings.osu_exe_path.clone().filter(|p| p.is_file() && (cfg!(windows) || looks_like_stable(p))) {
         return Some(build(exe, DetectSource::Settings));
+    }
+    #[cfg(unix)]
+    if settings.wine_prefix.is_some() {
+        return crate::wine::find_install(settings).map(|exe| build(exe, DetectSource::Settings));
     }
     if let Some(exe) = running_osu_exe() {
         return Some(build(exe, DetectSource::RunningProcess));
@@ -63,6 +66,7 @@ pub fn looks_like_stable(exe: &Path) -> bool {
 }
 
 /// Process id and executable of every running osu! stable (lazer is skipped).
+#[cfg(windows)]
 pub fn running_osu_processes() -> Vec<(u32, PathBuf)> {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
     let mut system = System::new();
@@ -72,10 +76,30 @@ pub fn running_osu_processes() -> Vec<(u32, PathBuf)> {
         ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
     );
     system
-        .processes_by_exact_name(OsStr::new("osu!.exe"))
+        .processes_by_exact_name(std::ffi::OsStr::new("osu!.exe"))
         .filter_map(|process| Some((process.pid().as_u32(), process.exe()?.to_path_buf())))
         .filter(|(_, exe)| looks_like_stable(exe))
         .collect()
+}
+
+#[cfg(unix)]
+pub fn running_osu_processes() -> Vec<(u32, PathBuf)> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessesToUpdate::All, true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet).with_cwd(UpdateKind::OnlyIfNotSet)
+            .with_environ(UpdateKind::OnlyIfNotSet));
+    let known = crate::wine::prefixes();
+    system.processes().values().filter_map(|process| {
+        let mut prefixes = known.clone();
+        // Only this key is used; no process environment is logged or sent to the frontend.
+        if let Some(prefix) = process.environ().iter().find_map(|value| value.to_str()?.strip_prefix("WINEPREFIX=")) {
+            prefixes.insert(0, PathBuf::from(prefix));
+        }
+        crate::wine::process_exe(process.name(), process.exe(), process.cmd(), process.cwd(), &prefixes)
+            .map(|exe| (process.pid().as_u32(), exe))
+    }).collect()
 }
 
 fn running_osu_exe() -> Option<PathBuf> {
@@ -103,9 +127,15 @@ fn registry_osu_exe() -> Option<PathBuf> {
     None
 }
 
+#[cfg(windows)]
 fn default_osu_exe() -> Option<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA")?;
     Some(PathBuf::from(local).join("osu!").join("osu!.exe")).filter(|exe| looks_like_stable(exe))
+}
+
+#[cfg(unix)]
+fn default_osu_exe() -> Option<PathBuf> {
+    crate::wine::find_install(&Settings::default())
 }
 
 fn build_install(
@@ -113,14 +143,24 @@ fn build_install(
     songs_override: Option<PathBuf>,
     source: DetectSource,
     username: Option<&str>,
+    wine_prefix: Option<&Path>,
 ) -> OsuInstall {
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or_default();
     let cfg = cfg_path_for(&dir, username)
         .and_then(|path| std::fs::read_to_string(path).ok())
         .map(|text| parse_cfg(&text))
         .unwrap_or_default();
+    let songs_dir = songs_override.unwrap_or_else(|| {
+        #[cfg(unix)]
+        if let Some(prefix) = wine_prefix {
+            return crate::wine::songs_path(&dir, cfg.get("BeatmapDirectory").map(String::as_str), Some(prefix));
+        }
+        #[cfg(windows)]
+        let _ = wine_prefix;
+        songs_dir_from_cfg(&dir, &cfg)
+    });
     OsuInstall {
-        songs_dir: songs_override.unwrap_or_else(|| songs_dir_from_cfg(&dir, &cfg)),
+        songs_dir,
         exclusive_fullscreen: cfg.get("Fullscreen").is_some_and(|v| v == "1"),
         exe,
         dir,
@@ -165,6 +205,17 @@ pub fn parse_cfg(text: &str) -> HashMap<String, String> {
 
 /// `BeatmapDirectory` is relative to the install folder unless it is an absolute path.
 pub fn songs_dir_from_cfg(osu_dir: &Path, cfg: &HashMap<String, String>) -> PathBuf {
+    #[cfg(unix)]
+    {
+        let prefix = crate::wine::prefix_for_exe(osu_dir).or_else(|| std::env::var_os("WINEPREFIX").map(PathBuf::from));
+        crate::wine::songs_path(osu_dir, cfg.get("BeatmapDirectory").map(String::as_str), prefix.as_deref())
+    }
+    #[cfg(windows)]
+    { windows_songs_dir_from_cfg(osu_dir, cfg) }
+}
+
+#[cfg(windows)]
+fn windows_songs_dir_from_cfg(osu_dir: &Path, cfg: &HashMap<String, String>) -> PathBuf {
     match cfg.get("BeatmapDirectory").map(|s| s.trim()).filter(|s| !s.is_empty()) {
         Some(dir) => {
             let dir = Path::new(dir);
@@ -175,6 +226,7 @@ pub fn songs_dir_from_cfg(osu_dir: &Path, cfg: &HashMap<String, String>) -> Path
 }
 
 /// The executable out of a registry shell command such as `"C:\osu!\osu!.exe" "%1"`.
+#[cfg(any(windows, test))]
 pub fn exe_from_shell_command(command: &str) -> Option<PathBuf> {
     let command = command.trim();
     if let Some(rest) = command.strip_prefix('"') {
@@ -198,6 +250,7 @@ mod tests {
         assert_eq!(cfg.len(), 3);
     }
 
+    #[cfg(windows)]
     #[test]
     fn songs_dir_is_relative_absolute_or_default() {
         let dir = Path::new(r"C:\Games\osu!");
@@ -270,20 +323,20 @@ mod tests {
         )
         .unwrap();
 
-        let install = build_install(exe.clone(), None, DetectSource::DefaultPath, Some("alice"));
+        let install = build_install(exe.clone(), None, DetectSource::DefaultPath, Some("alice"), None);
         assert_eq!(install.songs_dir, dir.path().join("Maps"));
         assert!(install.exclusive_fullscreen);
         assert_eq!(install.dir, dir.path());
 
         let overridden =
-            build_install(exe, Some(PathBuf::from(r"E:\Songs")), DetectSource::Settings, Some("alice"));
+            build_install(exe, Some(PathBuf::from(r"E:\Songs")), DetectSource::Settings, Some("alice"), None);
         assert_eq!(overridden.songs_dir, PathBuf::from(r"E:\Songs"));
     }
 
     #[test]
     fn missing_cfg_means_default_songs_dir_and_not_fullscreen() {
         let dir = tempfile::tempdir().unwrap();
-        let install = build_install(dir.path().join("osu!.exe"), None, DetectSource::DefaultPath, Some("x"));
+        let install = build_install(dir.path().join("osu!.exe"), None, DetectSource::DefaultPath, Some("x"), None);
         assert_eq!(install.songs_dir, dir.path().join("Songs"));
         assert!(!install.exclusive_fullscreen);
     }

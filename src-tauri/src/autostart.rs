@@ -6,15 +6,19 @@ use std::{io, path::Path};
 
 /// The flag the Run entry passes so a start at login shows no window.
 pub const BACKGROUND_FLAG: &str = "--background";
+#[cfg(windows)]
 const VALUE_NAME: &str = "osu!flow";
+#[cfg(windows)]
 const WINDOWS_ROOT: &str = r"Software\Microsoft\Windows\CurrentVersion";
 
 /// `"C:\path\osuflow.exe" --background`
+#[cfg(windows)]
 fn command_for(exe: &Path) -> String {
     format!("\"{}\" {BACKGROUND_FLAG}", exe.display())
 }
 
 /// The program a Run command starts, whether or not its path is quoted.
+#[cfg(windows)]
 fn command_exe(command: &str) -> Option<&str> {
     let command = command.trim();
     match command.strip_prefix('"') {
@@ -24,15 +28,18 @@ fn command_exe(command: &str) -> Option<&str> {
 }
 
 /// StartupApproved values start with a byte that is even while the entry is allowed to run.
+#[cfg(windows)]
 fn flagged_disabled(approved: &[u8]) -> bool {
     approved.first().is_some_and(|flag| flag % 2 == 1)
 }
 
+#[cfg(windows)]
 pub struct Autostart {
     run_key: String,
     approved_key: String,
 }
 
+#[cfg(windows)]
 impl Autostart {
     pub fn system() -> Self {
         Self::under(WINDOWS_ROOT)
@@ -92,19 +99,39 @@ impl Autostart {
     }
 }
 
-#[cfg(not(windows))]
+/// AppImage mounts are temporary; login entries must point at the original AppImage.
+pub fn executable() -> io::Result<std::path::PathBuf> {
+    #[cfg(target_os = "linux")]
+    if let Some(image) = std::env::var_os("APPIMAGE") {
+        let image = std::path::PathBuf::from(image);
+        if image.is_absolute() && image.is_file() { return Ok(image); }
+        return Err(io::Error::new(io::ErrorKind::NotFound, "Move the AppImage to a permanent folder before enabling start at login"));
+    }
+    std::env::current_exe()
+}
+
+#[cfg(unix)]
+pub struct Autostart { entry: Option<crate::login::LoginEntry> }
+
+#[cfg(unix)]
 impl Autostart {
-    pub fn is_enabled(&self, _exe: &Path) -> bool {
-        false
+    pub fn system() -> Self {
+        use crate::login::{Kind, LoginEntry};
+        use std::path::PathBuf;
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        #[cfg(target_os = "macos")]
+        let entry = home.map(|home| LoginEntry::new(home.join("Library/LaunchAgents/com.osuflow.app.plist"), Kind::LaunchAgent));
+        #[cfg(not(target_os = "macos"))]
+        let entry = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).filter(|path| path.is_absolute())
+            .or_else(|| home.map(|home| home.join(".config")))
+            .map(|config| LoginEntry::new(config.join("autostart/osuflow.desktop"), Kind::Desktop));
+        Self { entry }
     }
-
-    pub fn enable(&self, _exe: &Path) -> io::Result<()> {
-        Err(io::ErrorKind::Unsupported.into())
+    pub fn is_enabled(&self, exe: &Path) -> bool { self.entry.as_ref().is_some_and(|entry| entry.is_enabled(exe)) }
+    pub fn enable(&self, exe: &Path) -> io::Result<()> {
+        self.entry.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The user login folder could not be found"))?.enable(exe)
     }
-
-    pub fn disable(&self) -> io::Result<()> {
-        Ok(())
-    }
+    pub fn disable(&self) -> io::Result<()> { self.entry.as_ref().map_or(Ok(()), crate::login::LoginEntry::disable) }
 }
 
 #[cfg(all(test, windows))]

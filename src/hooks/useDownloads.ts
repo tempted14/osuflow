@@ -41,7 +41,9 @@ export function useDownloads() {
     setJobs((all) =>
       upsertJob(all, setId, { label, state: "queued", received: 0, total: null, error: null, mirror: null }),
     );
-    api.downloadBeatmapset(setId, hints.current.get(setId)).catch((error) => {
+    api.downloadBeatmapset(setId, hints.current.get(setId)).then((importMethod) => {
+      if (importMethod) setJobs((all) => upsertJob(all, setId, { importMethod }));
+    }).catch((error) => {
       const message = String(error);
       const cancelled = message.includes("cancelled");
       setJobs((all) =>

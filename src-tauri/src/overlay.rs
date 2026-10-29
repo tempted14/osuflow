@@ -89,6 +89,8 @@ pub struct OsuWindow {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OsuSnapshot {
     pub pids: Vec<u32>,
+    /// False on Unix: Wine processes are visible, native dialog/hung inspection is unavailable.
+    pub window_inspection: bool,
     pub windows: Vec<WindowCandidate>,
 }
 
@@ -101,7 +103,7 @@ pub fn snapshot_osu() -> OsuSnapshot {
 /// real modal dialog in a throwaway process instead of osu!.
 pub fn snapshot_for_pids(pids: Vec<u32>) -> OsuSnapshot {
     let windows = if pids.is_empty() { Vec::new() } else { win::windows_of(&pids) };
-    OsuSnapshot { pids, windows }
+    OsuSnapshot { pids, windows, window_inspection: cfg!(windows) }
 }
 
 pub fn locate_osu_window() -> OsuWindow {
@@ -189,9 +191,14 @@ pub fn show(app: &AppHandle) {
     state
         .overlay
         .on_shown(win::foreground_window_not_ours().or(osu.window.map(|w| w.handle)));
-    let _ = window.show();
-    let _ = window.set_always_on_top(true);
-    let _ = window.set_focus();
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.show();
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_focus();
+    }
+    #[cfg(target_os = "macos")]
+    crate::macos_panel::show(app);
     let _ = app.emit_to(
         LABEL,
         "overlay-shown",
@@ -206,7 +213,10 @@ pub fn show(app: &AppHandle) {
 pub fn hide(app: &AppHandle, refocus: bool) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
     let _ = app.emit_to(LABEL, "overlay-hidden", ());
+    #[cfg(not(target_os = "macos"))]
     let _ = window.hide();
+    #[cfg(target_os = "macos")]
+    crate::macos_panel::hide(app);
     let target = app.state::<AppState>().overlay.take_return_target();
     if let Some(handle) = target.filter(|_| refocus) {
         win::focus(handle);

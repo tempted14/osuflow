@@ -53,6 +53,10 @@ pub fn scan_songs(dir: &Path) -> HashSet<u32> {
 
 /// Windows paths compare case-insensitively, and watcher events may carry a `\\?\` prefix.
 fn same_path(a: &Path, b: &Path) -> bool {
+    #[cfg(not(windows))]
+    { a == b }
+    #[cfg(windows)]
+    {
     let normal = |p: &Path| {
         p.to_string_lossy()
             .trim_start_matches(r"\\?\")
@@ -60,6 +64,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
             .to_lowercase()
     };
     normal(a) == normal(b)
+    }
 }
 
 pub(crate) fn has_folder_for(dir: &Path, id: u32) -> bool {
@@ -232,9 +237,18 @@ mod tests {
         assert!(ids.contains(&8));
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn unix_paths_keep_their_case() {
+        assert!(same_path(Path::new("/maps/Songs"), Path::new("/maps/Songs/")));
+        assert!(!same_path(Path::new("/maps/Songs"), Path::new("/maps/songs")));
+    }
+
     #[test]
     fn paths_compare_like_windows_does() {
+        #[cfg(windows)]
         assert!(same_path(Path::new(r"C:\Games\osu!\Songs"), Path::new(r"c:\games\OSU!\songs\")));
+        #[cfg(windows)]
         assert!(same_path(Path::new(r"\\?\C:\Games\Songs"), Path::new(r"C:\Games\Songs")));
         assert!(!same_path(Path::new(r"C:\A"), Path::new(r"C:\B")));
     }

@@ -84,7 +84,7 @@ function Action(props: {
     );
   }
   if (installed || job?.state === "done") {
-    const label = installed ? "In your library" : "Sent to osu!";
+    const label = installed ? "In your library" : job ? downloadLabel(job) : "Sent to osu!";
     return (
       <span className="action done" title={label} role="img" aria-label={label}>
         <Icon name="check" />

@@ -11,8 +11,8 @@
 
 :root {
   color-scheme: dark;
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
 
   --text: #f5f4fb;
   --text-2: rgba(245, 244, 251, 0.72);
@@ -1832,4 +1832,21 @@ label.setting:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Unix uses a solid surface; rounded transparent corners stay outside the panel. */
+html[data-platform="linux"] .panel, html[data-platform="macos"] .panel { border-radius: 16px; overflow: hidden; background: var(--tint); }
+html[data-platform="macos"] .hotkey { width: 190px; }
+html[data-platform="macos"] { --font: -apple-system, system-ui, sans-serif; --font-display: var(--font); }
+.wine-settings { margin-top: 14px; padding: 14px; border: 1px solid var(--stroke); border-radius: var(--radius); background: var(--surface); }
+.wine-settings summary { cursor: pointer; font-weight: 600; }
+.wine-settings label { display: grid; gap: 5px; margin: 12px 0; color: var(--text-2); }
+.wine-settings input { width: 100%; min-width: 0; padding: 8px 10px; color: var(--text); background: var(--tint); border: 1px solid var(--stroke-strong); border-radius: var(--radius-sm); font: inherit; }
+.wine-settings input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wine-settings .note { overflow-wrap: anywhere; }
+/* visibility also removes closed filters from keyboard navigation where inert is unavailable. */
+.fwrap:not([data-open="true"]) { pointer-events: none; }
+@supports not selector(:has(*)) {
+  .flyout[aria-multiselectable="true"] .flyout-item { padding-left: 12px; }
+  .panel .card:not(.ghost) { animation: none; }
 }

@@ -287,8 +287,7 @@ impl crate::handoff::OsuEnv for StandInOsu {
 
     fn snapshot(&self) -> crate::overlay::OsuSnapshot {
         use crate::overlay::{OsuSnapshot, Rect, WindowCandidate};
-        OsuSnapshot {
-            pids: vec![1],
+        OsuSnapshot { window_inspection: true, pids: vec![1],
             windows: vec![WindowCandidate {
                 handle: 1,
                 rect: Rect { left: 0, top: 0, right: 2560, bottom: 1440 },
@@ -301,7 +300,7 @@ impl crate::handoff::OsuEnv for StandInOsu {
         }
     }
 
-    fn launch(&self, _install: &osu_locator::OsuInstall, archive: &std::path::Path) -> std::io::Result<()> {
+    fn launch(&self, _install: &osu_locator::OsuInstall, archive: &std::path::Path, _settings: &Settings) -> std::io::Result<()> {
         let folder = self.songs.join(archive.file_stem().expect("archive has a name"));
         let delay = self.import_after;
         std::thread::spawn(move || {

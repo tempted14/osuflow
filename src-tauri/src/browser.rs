@@ -340,6 +340,10 @@ mod stub_registry {
 
 /// Windows paths compare case-insensitively and may or may not carry the `\\?\` prefix.
 pub fn same_exe(a: &Path, b: &Path) -> bool {
+    #[cfg(not(windows))]
+    { std::fs::canonicalize(a).unwrap_or_else(|_| a.to_path_buf()) == std::fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf()) }
+    #[cfg(windows)]
+    {
     let normal = |p: &Path| {
         std::fs::canonicalize(p)
             .unwrap_or_else(|_| p.to_path_buf())
@@ -348,6 +352,7 @@ pub fn same_exe(a: &Path, b: &Path) -> bool {
             .to_lowercase()
     };
     normal(a) == normal(b)
+    }
 }
 
 /// The browser to pass links to: the saved one if it still exists, else the first usable
@@ -402,6 +407,7 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    #[cfg(windows)]
     #[test]
     fn exe_paths_compare_like_windows_does() {
         assert!(same_exe(Path::new(r"C:\Apps\QD\osuflow.exe"), Path::new(r"c:\apps\qd\OsuFlow.EXE")));
@@ -430,6 +436,7 @@ mod tests {
         assert_eq!(choose_browser(Some(me), &only_me, me, everything_exists), None);
     }
 
+    #[cfg(windows)]
     #[test]
     fn the_fallback_list_covers_the_common_browsers() {
         let list = fallback_browsers();

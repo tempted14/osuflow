@@ -119,6 +119,8 @@ export interface Settings {
   hideInstalled: boolean;
   linkHandler: boolean;
   previousBrowser: string | null;
+  winePrefix: string | null;
+  osuLaunchCommand: string | null;
 }
 
 export interface HotkeyStatus {
@@ -193,6 +195,7 @@ export interface LinkHandlerStatus {
 
 /** One download as the overlay tracks it, built from the `download-*` events. */
 export interface DownloadJob {
+  importMethod?: ImportMethod;
   setId: number;
   label: string;
   state: DownloadState;

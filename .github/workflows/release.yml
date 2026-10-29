@@ -1,39 +1,72 @@
 name: Release
 
-# Pushing a tag like v0.1.0 builds the Windows installer and attaches it to a draft GitHub release, which
-# you review and publish by hand. When SignPath signing is set up (below) the installer is signed first;
-# until then the release is simply unsigned.
-#
-# Running this by hand from the Actions tab builds, tests and (if set up) signs, but releases nothing:
-# the installer is left as a downloadable artifact of the run.
-#
-# Free code signing from the SignPath Foundation. Under Settings > Secrets and variables > Actions:
-#   secret    SIGNPATH_API_TOKEN             the API token of the CI user in SignPath
-#   variable  SIGNPATH_ORGANIZATION_ID       the organization id shown in SignPath
-#   variable  SIGNPATH_PROJECT_SLUG          optional, defaults to osuflow
-#   variable  SIGNPATH_SIGNING_POLICY_SLUG   optional, defaults to release-signing
-# The artifact configuration to create in SignPath is kept in .github/signpath/artifact-configuration.xml.
+# A manual run keeps installers as artifacts. Tags create one draft after every platform passes.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
 permissions:
-  contents: write # the draft release
-  actions: read # SignPath reads this run to check where the build came from
+  contents: write
+  actions: read
 
 jobs:
-  windows-installer:
-    runs-on: windows-latest
+  installers:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+            arch: x64
+            bundles: nsis
+          - name: Linux x64 (experimental)
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+            arch: x64
+            bundles: appimage,deb
+          - name: macOS Apple Silicon (experimental)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos
+            arch: arm64
+            bundles: dmg
+          - name: macOS Intel (experimental)
+            os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos
+            arch: x64
+            bundles: dmg
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
     env:
-      # Signing switches on once the token and the organization id exist.
-      SIGN: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      CARGO_BUILD_JOBS: 2
+      SIGN: ${{ matrix.platform == 'windows' && secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
       - uses: actions/checkout@v4
-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libxdo-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
       - name: Check the tag matches the version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -41,50 +74,42 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           if [ "v$version" != "$TAG" ]; then
-            echo "The tag $TAG doesn't match version $version in package.json."
+            echo "The tag $TAG does not match version $version."
             exit 1
           fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
       - run: npm ci
-
       - name: Frontend tests
         run: npm test
-
       - name: Backend tests
-        run: cargo test --lib
+        run: cargo test --lib --locked
         working-directory: src-tauri
-
-      - name: Build the installer
-        run: npm run tauri build
-
-      # SignPath is given the installer under a fixed name, so its configuration never has to know the version.
-      - name: Stage the installer
+      - name: Rust checks
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: src-tauri
+      - name: Build installers
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Headless UI checks
+        if: matrix.platform == 'windows'
+        run: |
+          node tools/headless/regress.mjs
+          node tools/headless/platforms.mjs
+      - name: Stage Windows installer for signing
+        if: matrix.platform == 'windows'
         id: stage
         run: |
+          mkdir -p staging
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*_x64-setup.exe staging/osuflow-setup.exe
           version=$(node -p "require('./package.json').version")
-          mkdir staging
-          cp src-tauri/target/release/bundle/nsis/*_x64-setup.exe staging/osuflow-setup.exe
           echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Keep the unsigned installer
+      - name: Keep unsigned Windows installer
+        if: matrix.platform == 'windows'
         id: unsigned
         uses: actions/upload-artifact@v4
         with:
-          name: installer-unsigned
+          name: installer-unsigned-windows-x64
           path: staging/osuflow-setup.exe
-
-      - name: Sign the installer (SignPath Foundation)
+          if-no-files-found: error
+      - name: Sign Windows installer (SignPath Foundation)
         if: env.SIGN == 'true'
         uses: signpath/github-action-submit-signing-request@v3
         with:
@@ -95,52 +120,74 @@ jobs:
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           parameters: |
             version: "${{ steps.stage.outputs.version }}"
-          # Every release is approved by hand in SignPath, so give that time.
           wait-for-completion-timeout-in-seconds: 7200
           output-artifact-directory: signed
-
-      - name: Check the signature
+      - name: Check Windows signature
         if: env.SIGN == 'true'
         shell: pwsh
         run: |
-          $sig = Get-AuthenticodeSignature signed/osuflow-setup.exe
-          "$($sig.Status): $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') { throw "The installer's signature is $($sig.Status), not Valid." }
-
-      - name: Name the installer
-        env:
-          VERSION: ${{ steps.stage.outputs.version }}
+          $signature = Get-AuthenticodeSignature signed/osuflow-setup.exe
+          if ($signature.Status -ne 'Valid') { throw "The installer signature is not valid." }
+      - name: Stage release installers
         run: |
-          source=staging
-          if [ "$SIGN" = "true" ]; then source=signed; fi
-          mkdir release
-          cp "$source/osuflow-setup.exe" "release/osu!flow_${VERSION}_x64-setup.exe"
-
-      - name: Keep the installer with this run
+          mkdir -p release
+          version=$(node -p "require('./package.json').version")
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            source=staging
+            if [ "$SIGN" = "true" ]; then source=signed; fi
+            cp "$source/osuflow-setup.exe" "release/osu!flow_${version}_x64-setup.exe"
+          else
+            find src-tauri/target/${{ matrix.target }}/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.dmg' \) -exec cp '{}' release/ \;
+          fi
+      - name: Keep installers with this run
         uses: actions/upload-artifact@v4
         with:
-          name: installer
-          path: release/*.exe
+          name: release-installer-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
 
-      - name: Draft the release
-        if: startsWith(github.ref, 'refs/tags/v')
+  draft-release:
+    name: Draft release after all platforms pass
+    needs: installers
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-installer-*
+          merge-multiple: true
+          path: release
+      - name: Create one draft with every installer
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          SIGNED: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
         run: |
-          if [ "$SIGN" = "true" ]; then
-            trust="The installer is signed. Free code signing provided by SignPath.io, certificate by SignPath Foundation."
-          else
-            trust="The installer isn't code-signed, so Windows SmartScreen may say it protects your PC: choose **More info**, then **Run anyway**."
-          fi
           {
-            echo "Download **osu.flow_..._x64-setup.exe** below and run it. It installs for your user only (no administrator rights) and adds a Start menu entry."
+            echo "Linux and macOS builds are **experimental**, for osu! stable under Wine only. They are unsigned and have not been confirmed by platform testers."
             echo
-            echo "$trust"
+            echo "Windows: download the x64 setup.exe. Linux: use the AppImage or deb. macOS: choose the Apple Silicon (aarch64) or Intel (x64) dmg; allow the app in System Settings > Privacy & Security > Open Anyway."
+            echo
+            if [ "$SIGNED" = "true" ]; then
+              echo "The Windows installer is signed. Free code signing provided by SignPath.io, certificate by SignPath Foundation."
+            else
+              echo "Windows installers are not code-signed. SmartScreen may require More info > Run anyway."
+            fi
+            echo
+            echo "See docs/experimental-wine.md for Wine setup, the Wayland toggle, and known limitations."
+            echo
+            echo '```text'
+            (cd release && sha256sum *)
+            echo '```'
           } > notes.md
-          file=$(ls release/*.exe)
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "$file" --clobber
+          if gh release view "$TAG" --json isDraft > existing.json 2>/dev/null; then
+            if ! jq -e '.isDraft == true' existing.json > /dev/null; then
+              echo "Refusing to modify an already-published release."
+              exit 1
+            fi
+            gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$TAG" "$file" --draft --title "osu!flow $TAG" --notes-file notes.md
+            gh release create "$TAG" release/* --draft --prerelease --title "osu!flow $TAG — experimental Wine support" --notes-file notes.md
           fi

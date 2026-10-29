@@ -23,7 +23,7 @@ export function DownloadsDrawer(props: {
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
   const summary = summarizeDownloads(jobs);
-  const working = summary.active > 0 || summary.failed > 0;
+  const working = summary.active > 0 || summary.failed > 0 || (summary.manual ?? 0) > 0;
 
   useEffect(() => {
     if (working || open) {

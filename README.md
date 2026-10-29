@@ -15,7 +15,7 @@ Cover art, titles and artists in screenshots belong to their respective owners (
 **Website: [osuflow.github.io](https://osuflow.github.io/)** (screenshots, a try-it demo, the FAQ and the download).
 
 > osu!flow is not affiliated with or endorsed by ppy. It uses public beatmap mirrors, never touches
-> the osu! client's memory or network, and hands maps over exactly like double-clicking an `.osz`.
+> the osu! client's memory or network, and hands maps over through osu!'s file import.
 
 ## Install
 
@@ -28,6 +28,8 @@ Cover art, titles and artists in screenshots belong to their respective owners (
 
 To remove it, use Windows' *Installed apps*. That also removes the *Start with Windows* entry and
 the browser registration, if you turned either on.
+
+**Linux/macOS preview:** version 3.4.0 is being prepared for osu! stable under Wine. See the [experimental setup guide and testing checklist](docs/experimental-wine.md). Native platform testing is still pending; the current public release remains Windows-only.
 
 ## Using it
 

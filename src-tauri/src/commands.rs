@@ -20,6 +20,9 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, State};
 
+#[tauri::command]
+pub fn platform() -> crate::platform::PlatformInfo { crate::platform::info() }
+
 pub struct AppState {
     pub settings: RwLock<Settings>,
     pub settings_path: PathBuf,
@@ -131,6 +134,10 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 #[tauri::command]
 pub fn set_settings(app: AppHandle, state: State<'_, AppState>, settings: Settings) -> Result<Settings> {
     let mut settings = settings.normalized();
+    #[cfg(unix)]
+    if let Some(command) = &settings.osu_launch_command {
+        crate::wine::custom_launch(command, std::path::Path::new("map.osz"), None)?;
+    }
     settings.hotkey = state.settings_snapshot().hotkey;
     settings.save(&state.settings_path)?;
     *state.settings.write().unwrap() = settings.clone();

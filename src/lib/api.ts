@@ -13,6 +13,8 @@ import type {
   Settings,
 } from "./types";
 
+export const platform = () => invoke<import("./platform").PlatformInfo>("platform");
+
 export const search = (query: SearchQuery) => invoke<SearchResponse>("search", { query });
 
 /**

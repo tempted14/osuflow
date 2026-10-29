@@ -14,11 +14,14 @@ export async function start() {
   catch (error) { await server.close(); throw error; }
 }
 export function mockScript(label, extra = {}) {
-  const settings = { osuExePath: null, songsDir: null, noVideo: true, mirrorOrder: ['catboy', 'osuDirect'], hotkey: 'Ctrl+Shift+D', hideInstalled: false, linkHandler: false, previousBrowser: null, ...extra.settings };
+  const platform = extra.platform ?? { os: "windows", wayland: false, defaultHotkey: "Ctrl+Shift+D", experimental: false };
+  const settings = { winePrefix: null, osuLaunchCommand: null, osuExePath: null, songsDir: null, noVideo: true, mirrorOrder: ['catboy', 'osuDirect'], hotkey: platform.defaultHotkey, hideInstalled: false, linkHandler: false, previousBrowser: null, ...extra.settings };
   const data = {
     sets,
     installed: extra.installed ?? [sets[2].id, sets[5].id],
     settings,
+    platform,
+    importMethod: extra.importMethod ?? null,
     label,
     link: extra.link ?? { enabled: false, registered: false, isDefault: false, previousBrowser: 'chrome.exe' },
     install: extra.install === undefined
@@ -28,10 +31,12 @@ export function mockScript(label, extra = {}) {
     prefs: extra.prefs ?? null,
     toast: extra.toast ?? null,
     autostart: extra.autostart ?? false,
-    hotkeyStatus: extra.hotkeyStatus ?? { hotkey: 'Ctrl+Shift+D', registered: true, error: null },
+    hotkeyStatus: extra.hotkeyStatus ?? { hotkey: settings.hotkey, registered: true, error: null },
   };
   return `(() => {
     const D = ${JSON.stringify(data)};
+    const applyPlatform = () => { document.documentElement.dataset.platform = D.platform.os; if (D.platform.os !== "windows") document.documentElement.dataset.glass = "off"; };
+    if (document.documentElement) applyPlatform(); else document.addEventListener("DOMContentLoaded", applyPlatform);
     try { localStorage.removeItem('osuflow.browse.v1'); if (D.prefs) localStorage.setItem('osuflow.browse.v1', JSON.stringify(D.prefs)); } catch {}
     const cbs = {}; let next = 1; const ls = {};
     window.__emit = (event, payload) => (ls[event] || []).forEach(([id, cbid]) => cbs[cbid] && cbs[cbid]({ event, id, payload }));
@@ -47,6 +52,9 @@ export function mockScript(label, extra = {}) {
           case 'plugin:event|listen': { const id = next++; (ls[args.event] ??= []).push([id, args.handler]); return id; }
           case 'plugin:event|unlisten': return;
           case 'plugin:event|emit': window.__emit(args.event, args.payload); return;
+          case 'platform': return D.platform;
+          case 'download_beatmapset': return D.importMethod;
+          case 'set_hotkey': D.hotkeyStatus = { hotkey: args.hotkey, registered: true, error: null }; return D.hotkeyStatus;
           case 'get_settings': return D.settings;
           case 'set_settings': Object.assign(D.settings, args.settings); return D.settings;
           case 'get_installed': return D.installed;

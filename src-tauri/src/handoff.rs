@@ -73,6 +73,7 @@ pub fn assess(snapshot: &OsuSnapshot) -> OsuStatus {
     if snapshot.pids.len() > 1 {
         return OsuStatus::Blocked(Blocked::MultipleInstances);
     }
+    if !snapshot.window_inspection { return OsuStatus::Ready; }
     let visible: Vec<&WindowCandidate> = snapshot.windows.iter().filter(|w| w.visible).collect();
     if visible.is_empty() {
         return OsuStatus::Starting;
@@ -107,7 +108,7 @@ pub fn assess(snapshot: &OsuSnapshot) -> OsuStatus {
 pub trait OsuEnv: Send + Sync {
     fn install(&self, settings: &Settings) -> Option<OsuInstall>;
     fn snapshot(&self) -> OsuSnapshot;
-    fn launch(&self, install: &OsuInstall, archive: &Path) -> io::Result<()>;
+    fn launch(&self, install: &OsuInstall, archive: &Path, settings: &Settings) -> io::Result<()>;
 }
 
 pub struct SystemEnv;
@@ -121,8 +122,8 @@ impl OsuEnv for SystemEnv {
         overlay::snapshot_osu()
     }
 
-    fn launch(&self, install: &OsuInstall, archive: &Path) -> io::Result<()> {
-        importer::launch_osu(install, archive)
+    fn launch(&self, install: &OsuInstall, archive: &Path, settings: &Settings) -> io::Result<()> {
+        importer::launch_with_settings(install, archive, settings)
     }
 }
 
@@ -190,7 +191,7 @@ fn osu_took(archive: &Path, songs_dir: &Path, set_id: u32, check_listing: bool) 
 
 fn is_sharing_violation(error: &io::Error) -> bool {
     // ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION.
-    matches!(error.raw_os_error(), Some(32 | 33))
+    cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33))
 }
 
 /// Opens the file asking for nobody else to have it open. That fails while a virus scanner,
@@ -203,7 +204,8 @@ fn open_exclusively(path: &Path) -> io::Result<()> {
     }
     #[cfg(not(windows))]
     {
-        std::fs::File::open(path).map(drop)
+        // Unix has no Windows sharing modes. Preserve missing/unreadable-path errors only.
+        std::fs::metadata(path).map(|_| ())
     }
 }
 
@@ -277,7 +279,8 @@ impl Handoff {
         let cold_start = status != OsuStatus::Ready;
 
         let (launch_install, launch_archive) = (install.clone(), archive.to_path_buf());
-        if let Err(error) = self.blocking(move |env| env.launch(&launch_install, &launch_archive)).await? {
+        let launch_settings = settings.clone();
+        if let Err(error) = self.blocking(move |env| env.launch(&launch_install, &launch_archive, &launch_settings)).await? {
             return importer::place_in_songs(archive, Some(&install.songs_dir), Some(error));
         }
 
@@ -351,8 +354,7 @@ mod tests {
     /// What a healthy osu! looks like from outside (checked on a real install): one visible,
     /// enabled game window plus hidden, disabled helper windows.
     fn ready() -> OsuSnapshot {
-        OsuSnapshot {
-            pids: vec![10],
+        OsuSnapshot { window_inspection: true, pids: vec![10],
             windows: vec![
                 win(1, 2560, 1441),
                 WindowCandidate { visible: false, enabled: false, owned: true, ..win(2, 0, 0) },
@@ -385,9 +387,9 @@ mod tests {
     #[test]
     fn nothing_running_and_nothing_showing_yet_are_told_apart() {
         assert_eq!(assess(&not_running()), OsuStatus::NotRunning);
-        let booting = OsuSnapshot { pids: vec![10], windows: vec![WindowCandidate { visible: false, ..win(1, 800, 600) }] };
+        let booting = OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![WindowCandidate { visible: false, ..win(1, 800, 600) }] };
         assert_eq!(assess(&booting), OsuStatus::Starting);
-        assert_eq!(assess(&OsuSnapshot { pids: vec![10], windows: vec![] }), OsuStatus::Starting);
+        assert_eq!(assess(&OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![] }), OsuStatus::Starting);
     }
 
     #[test]
@@ -397,8 +399,7 @@ mod tests {
 
     #[test]
     fn a_disabled_game_window_means_a_modal_dialog_is_up() {
-        let snapshot = OsuSnapshot {
-            pids: vec![10],
+        let snapshot = OsuSnapshot { window_inspection: true, pids: vec![10],
             windows: vec![WindowCandidate { enabled: false, ..win(1, 2560, 1441) }],
         };
         assert_eq!(assess(&snapshot), OsuStatus::Blocked(Blocked::DialogOpen));
@@ -413,8 +414,7 @@ mod tests {
 
     #[test]
     fn only_owned_windows_showing_is_a_dialog() {
-        let snapshot = OsuSnapshot {
-            pids: vec![10],
+        let snapshot = OsuSnapshot { window_inspection: true, pids: vec![10],
             windows: vec![WindowCandidate { owned: true, ..win(9, 357, 149) }],
         };
         assert_eq!(assess(&snapshot), OsuStatus::Blocked(Blocked::DialogOpen));
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn a_hung_window_blocks() {
-        let snapshot = OsuSnapshot { pids: vec![10], windows: vec![WindowCandidate { hung: true, ..win(1, 2560, 1441) }] };
+        let snapshot = OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![WindowCandidate { hung: true, ..win(1, 2560, 1441) }] };
         assert_eq!(assess(&snapshot), OsuStatus::Blocked(Blocked::NotResponding));
     }
 
@@ -436,9 +436,8 @@ mod tests {
     #[test]
     fn a_minimised_game_window_is_not_mistaken_for_a_dialog_or_hides_one() {
         let minimised = WindowCandidate { minimized: true, ..win(1, 160, 28) };
-        assert_eq!(assess(&OsuSnapshot { pids: vec![10], windows: vec![minimised] }), OsuStatus::Ready);
-        let with_dialog = OsuSnapshot {
-            pids: vec![10],
+        assert_eq!(assess(&OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![minimised] }), OsuStatus::Ready);
+        let with_dialog = OsuSnapshot { window_inspection: true, pids: vec![10],
             windows: vec![minimised, WindowCandidate { owned: true, ..win(9, 357, 149) }],
         };
         assert_eq!(assess(&with_dialog), OsuStatus::Blocked(Blocked::DialogOpen));
@@ -451,6 +450,18 @@ mod tests {
         assert!(Blocked::NotResponding.to_string().contains("restart it"));
         let message = AppError::OsuBusy(Blocked::DialogOpen).to_string();
         assert!(message.starts_with("osu! can't take a map right now"), "{message}");
+    }
+
+    #[test]
+    fn wine_process_only_snapshots_are_ready_without_claiming_dialog_detection() {
+        let snapshot = OsuSnapshot { pids: vec![10], windows: vec![], window_inspection: false };
+        assert_eq!(assess(&snapshot), OsuStatus::Ready);
+        assert_eq!(assess(&OsuSnapshot { pids: vec![10, 11], ..snapshot }), OsuStatus::Blocked(Blocked::MultipleInstances));
+    }
+
+    #[test]
+    fn unix_errno_values_are_not_windows_sharing_violations() {
+        for code in [32, 33] { assert_eq!(is_sharing_violation(&io::Error::from_raw_os_error(code)), cfg!(windows)); }
     }
 
     // ---- a fake machine -------------------------------------------------------------------
@@ -503,7 +514,7 @@ mod tests {
             if queue.len() > 1 { queue.pop_front().unwrap() } else { queue.front().cloned().unwrap() }
         }
 
-        fn launch(&self, _install: &OsuInstall, archive: &Path) -> io::Result<()> {
+        fn launch(&self, _install: &OsuInstall, archive: &Path, _settings: &Settings) -> io::Result<()> {
             if self.launch_fails {
                 return Err(io::Error::new(io::ErrorKind::NotFound, "no osu!.exe"));
             }
@@ -687,8 +698,8 @@ mod tests {
     async fn will_not_launch_with_a_disabled_game_window_a_hung_osu_or_two_copies() {
         let world = world();
         let archive = archive(&world, 5);
-        let disabled = OsuSnapshot { pids: vec![10], windows: vec![WindowCandidate { enabled: false, ..win(1, 2560, 1441) }] };
-        let hung = OsuSnapshot { pids: vec![10], windows: vec![WindowCandidate { hung: true, ..win(1, 2560, 1441) }] };
+        let disabled = OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![WindowCandidate { enabled: false, ..win(1, 2560, 1441) }] };
+        let hung = OsuSnapshot { window_inspection: true, pids: vec![10], windows: vec![WindowCandidate { hung: true, ..win(1, 2560, 1441) }] };
         let mut two = ready();
         two.pids.push(11);
         for (snapshot, expected) in [
