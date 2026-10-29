@@ -665,14 +665,22 @@ mod tests {
     async fn osu_taking_the_archive_is_seen_within_a_few_polls_not_a_second_later() {
         let world = world();
         let archive = archive(&world, 32);
+        let taken = Arc::new(StdMutex::new(None::<Instant>));
+        let record = taken.clone(); let songs = world.songs.clone();
         let env = Arc::new(
             FakeEnv::new(Some(world.install.clone()), ready())
-                .on_launch(moves_archive_into_songs_after(&world.songs, Duration::from_millis(100))),
+                .on_launch(move |archive| {
+                    let source = archive.to_path_buf(); let target = songs.join(source.file_name().unwrap()); let record = record.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(100));
+                        let mut taken = record.lock().unwrap(); std::fs::rename(source, target).unwrap(); *taken = Some(Instant::now());
+                    });
+                }),
         );
         let timing = Timing { verify_poll: Duration::from_millis(10), ..quick_without_listings() };
-        let started = Instant::now();
         Handoff::with_timing(env, timing).hand_off(&archive, 32, &Settings::default()).await.unwrap();
-        let late = started.elapsed().saturating_sub(Duration::from_millis(100));
+        // Measure the actual move; a loaded CI runner may schedule its thread after 100 ms.
+        let late = taken.lock().unwrap().unwrap().elapsed();
         assert!(late < Duration::from_millis(80), "noticed {late:?} after osu! had it");
     }
 

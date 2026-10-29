@@ -165,6 +165,9 @@ impl Library {
         let root = dir.to_path_buf();
         let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
             let Ok(event) = event else { return };
+            // Reading a hash file produces inotify Open/Access events. Processing those would
+            // reopen it forever, starving registration of newly created hash directories.
+            if matches!(event.kind, notify::EventKind::Access(_)) { return; }
             if client == crate::settings::GameClient::Lazer {
                 let delta = {
                     let mut files = files.lock().unwrap();
