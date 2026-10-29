@@ -12,12 +12,13 @@ use crate::{
 use serde::Serialize;
 use std::{
     path::Path,
-    process::{Command, Stdio},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportMethod {
+    OpenedInLazer,
+    SavedForLazer,
     /// osu! was started (or, if already running, was handed the file).
     LaunchedOsu,
     /// The archive was placed in the Songs folder.
@@ -40,6 +41,7 @@ pub fn place_in_songs(
 /// Opens the archive with osu! the way Explorer does for a double-click or "Open with": through
 /// Windows' own .osz file association, whenever that leads to this osu!. Otherwise (another
 /// program owns .osz, or the shell refuses) `osu!.exe` is started with the file directly.
+#[cfg(windows)]
 pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
     // The shell picks the program from the file's own extension, so ask about that one.
     let extension = osz.extension().map(|extension| format!(".{}", extension.to_string_lossy()));
@@ -51,11 +53,14 @@ pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
 }
 
 /// Whether the program Windows opens .osz files with is this osu! (and not lazer, say).
+#[cfg(windows)]
 fn association_leads_to(associated: Option<&Path>, osu_exe: &Path) -> bool {
     associated.is_some_and(|program| crate::browser::same_exe(program, osu_exe))
 }
 
+#[cfg(windows)]
 fn launch_exe(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
+    use std::process::{Command, Stdio};
     // osu! expects to start in its own folder. The child is deliberately not waited on.
     Command::new(&install.exe)
         .arg(osz)
@@ -128,20 +133,15 @@ mod shell {
     }
 }
 
-#[cfg(not(windows))]
-mod shell {
-    use std::{
-        io,
-        path::{Path, PathBuf},
-    };
+#[cfg(all(unix, test))]
+pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
+    crate::wine::launch(install, osz, &crate::settings::Settings::default())
+}
 
-    pub fn associated_exe(_extension: &str) -> Option<PathBuf> {
-        None
-    }
-
-    pub fn open(_file: &Path) -> io::Result<()> {
-        Err(io::ErrorKind::Unsupported.into())
-    }
+pub fn launch_with_settings(install: &OsuInstall, osz: &Path, settings: &crate::settings::Settings) -> std::io::Result<()> {
+    if settings.game_client == crate::settings::GameClient::Lazer { return crate::lazer::launch(install, osz, settings); }
+    #[cfg(windows)] { let _ = settings; launch_osu(install, osz) }
+    #[cfg(unix)] { crate::wine::launch(install, osz, settings) }
 }
 
 fn move_to_songs(osz: &Path, songs: &Path) -> Result<()> {
@@ -196,7 +196,7 @@ mod tests {
         let songs = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
         let install = OsuInstall {
-            exe: downloads.path().join("not-osu.exe"),
+            client: crate::settings::GameClient::Stable, exe: downloads.path().join("not-osu.exe"),
             dir: downloads.path().to_path_buf(),
             songs_dir: songs.path().to_path_buf(),
             exclusive_fullscreen: false,
@@ -212,7 +212,7 @@ mod tests {
         let downloads = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
         let install = OsuInstall {
-            exe: downloads.path().join("not-osu.exe"),
+            client: crate::settings::GameClient::Stable, exe: downloads.path().join("not-osu.exe"),
             dir: downloads.path().to_path_buf(),
             songs_dir: downloads.path().join("nope"),
             exclusive_fullscreen: false,
@@ -222,6 +222,7 @@ mod tests {
         assert!(matches!(place_in_songs(&osz, None, Some(error)), Err(AppError::Io(_))));
     }
 
+    #[cfg(windows)]
     #[test]
     fn only_an_association_that_leads_to_this_osu_counts() {
         let exe = Path::new(r"C:\osu!\osu!.exe");
@@ -295,7 +296,7 @@ mod tests {
     #[cfg(windows)]
     fn install_at(exe: &Path, dir: &Path, songs: &Path) -> OsuInstall {
         OsuInstall {
-            exe: exe.to_path_buf(),
+            client: crate::settings::GameClient::Stable, exe: exe.to_path_buf(),
             dir: dir.to_path_buf(),
             songs_dir: songs.to_path_buf(),
             exclusive_fullscreen: false,

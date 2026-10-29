@@ -9,7 +9,10 @@ use std::str::FromStr;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+#[cfg(not(target_os = "macos"))]
 pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+D";
+#[cfg(target_os = "macos")]
+pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+D";
 
 /// What the settings screen shows: the configured hotkey and whether Windows accepted it.
 #[derive(Debug, Clone, Serialize)]
@@ -46,6 +49,9 @@ pub fn parse(hotkey: &str) -> Result<Shortcut> {
 }
 
 pub fn register(app: &AppHandle, hotkey: &str) -> Result<()> {
+    if crate::platform::wayland() {
+        return Err(AppError::Hotkey("global shortcuts are unavailable on Wayland; bind osuflow --toggle in your compositor or use Search maps in the tray".into()));
+    }
     let shortcut = parse(hotkey)?;
     app.global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
@@ -61,6 +67,7 @@ pub fn register(app: &AppHandle, hotkey: &str) -> Result<()> {
 }
 
 pub fn unregister(app: &AppHandle, hotkey: &str) {
+    if crate::platform::wayland() { return; }
     if let Ok(shortcut) = Shortcut::from_str(hotkey.trim()) {
         let _ = app.global_shortcut().unregister(shortcut);
     }

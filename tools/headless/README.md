@@ -10,6 +10,8 @@ Use Node **22 or newer** (native `fetch` and `WebSocket`), install the app's dep
 
 ```powershell
 node tools/headless/regress.mjs                 # all 108 recovered checks
+node tools/headless/platforms.mjs               # platform settings + Songs/F5 fallback (mocked)
+node tools/headless/clients.mjs                 # client switching, Browse, lazer recovery (mocked)
 node tools/headless/regress.mjs topbar hover    # optional groups
 node tools/headless/real-fixture.mjs           # refresh 16 ranked sets; check 64 cover URLs
 $env:SETS = 'real-sets.json'

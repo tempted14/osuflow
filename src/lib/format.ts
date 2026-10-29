@@ -33,7 +33,7 @@ export function starRange(set: Pick<Beatmapset, "beatmaps">): string | null {
 
 const megabytes = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
-export function downloadLabel(job: Pick<DownloadJob, "state" | "received" | "total">): string {
+export function downloadLabel(job: Pick<DownloadJob, "state" | "received" | "total" | "importMethod">): string {
   switch (job.state) {
     case "queued":
       return "Queued";
@@ -44,7 +44,9 @@ export function downloadLabel(job: Pick<DownloadJob, "state" | "received" | "tot
     case "importing":
       return "Sending to osu!…";
     case "done":
-      return "Sent to osu!";
+      if (job.importMethod === "movedToSongs") return "Saved to Songs — press F5 in song select";
+      if (job.importMethod === "savedForLazer") return "Downloaded — open in osu!lazer";
+      return job.importMethod === "openedInLazer" ? "Sent to osu!lazer" : "Sent to osu!";
     case "failed":
       return "Failed";
     case "cancelled":

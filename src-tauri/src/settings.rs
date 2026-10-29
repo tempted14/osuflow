@@ -2,15 +2,27 @@ use crate::{hotkey::DEFAULT_HOTKEY, mirrors::MirrorId};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GameClient { #[default] Stable, Lazer }
+
 /// User settings, stored as JSON in the app config dir. Unknown or missing keys are fine, so
 /// older and newer builds can share a file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub game_client: GameClient,
+    pub lazer_exe_path: Option<PathBuf>,
+    pub lazer_data_dir: Option<PathBuf>,
+    pub lazer_launch_command: Option<String>,
     /// Override for `osu!.exe`; `None` means auto-detect.
     pub osu_exe_path: Option<PathBuf>,
     /// Override for the Songs folder; `None` means read it from osu!'s own config.
     pub songs_dir: Option<PathBuf>,
+    /// Host path to a Wine prefix; used only on Unix.
+    pub wine_prefix: Option<PathBuf>,
+    /// Optional argv-style launch command. {file} is substituted without a shell.
+    pub osu_launch_command: Option<String>,
     pub no_video: bool,
     /// Preferred mirror order; always contains every known mirror once after `normalized`.
     pub mirror_order: Vec<MirrorId>,
@@ -28,8 +40,14 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            game_client: GameClient::Stable,
+            lazer_exe_path: None,
+            lazer_data_dir: None,
+            lazer_launch_command: None,
             osu_exe_path: None,
             songs_dir: None,
+            wine_prefix: None,
+            osu_launch_command: None,
             no_video: true,
             mirror_order: MirrorId::DEFAULT_ORDER.to_vec(),
             hotkey: DEFAULT_HOTKEY.to_string(),
@@ -94,6 +112,13 @@ impl Settings {
         self.mirror_order = order;
         self.osu_exe_path = self.osu_exe_path.filter(|p| !p.as_os_str().is_empty());
         self.songs_dir = self.songs_dir.filter(|p| !p.as_os_str().is_empty());
+        self.lazer_exe_path = self.lazer_exe_path.filter(|path| !path.as_os_str().is_empty());
+        self.lazer_data_dir = self.lazer_data_dir.filter(|path| !path.as_os_str().is_empty());
+        self.lazer_launch_command = self.lazer_launch_command.map(|command| command.trim().to_owned()).filter(|command| !command.is_empty());
+        self.wine_prefix = self.wine_prefix.filter(|path| !path.as_os_str().is_empty());
+        self.osu_launch_command = self.osu_launch_command.map(|command| command.trim().to_owned()).filter(|command| !command.is_empty());
+        #[cfg(not(windows))]
+        { self.link_handler = false; }
         self.hotkey = match self.hotkey.trim() {
             "" => DEFAULT_HOTKEY.to_string(),
             trimmed => trimmed.to_string(),
@@ -151,7 +176,7 @@ mod tests {
     #[test]
     fn overlay_defaults_are_ctrl_shift_d_and_show_installed_maps() {
         let s = Settings::default();
-        assert_eq!(s.hotkey, "Ctrl+Shift+D");
+        assert_eq!(s.hotkey, DEFAULT_HOTKEY);
         assert!(!s.hide_installed);
     }
 
@@ -197,7 +222,8 @@ mod tests {
             ..Settings::default()
         };
         s.save(&path).unwrap();
-        assert_eq!(Settings::load(&path), s);
+        let expected = Settings { link_handler: cfg!(windows), ..s };
+        assert_eq!(Settings::load(&path), expected);
 
         std::fs::write(&path, r#"{"noVideo": false, "hotkey": "Alt+O"}"#).unwrap();
         let older = Settings::load(&path);

@@ -17,14 +17,14 @@ fn toggle_overlay_in_background(app: &AppHandle) {
 
 /// Whether Windows starts osu!flow at login.
 pub fn autostart_enabled() -> bool {
-    std::env::current_exe().is_ok_and(|exe| Autostart::system().is_enabled(&exe))
+    crate::autostart::executable().is_ok_and(|exe| Autostart::system().is_enabled(&exe))
 }
 
 /// Switches "Start with Windows" and tells the tray menu and any open settings window.
 pub fn set_autostart(app: &AppHandle, enabled: bool) -> std::io::Result<bool> {
     let autostart = Autostart::system();
     if enabled {
-        autostart.enable(&std::env::current_exe()?)?;
+        autostart.enable(&crate::autostart::executable()?)?;
     } else {
         autostart.disable()?;
     }
@@ -37,7 +37,7 @@ pub fn set_autostart(app: &AppHandle, enabled: bool) -> std::io::Result<bool> {
 fn menu(app: &AppHandle, hotkey: &str) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, "open", format!("Search maps ({hotkey})"), true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
-    let startup = CheckMenuItem::with_id(app, "autostart", "Start with Windows", true, autostart_enabled(), None::<&str>)?;
+    let startup = CheckMenuItem::with_id(app, "autostart", crate::platform::autostart_label(), true, autostart_enabled(), None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit osu!flow", true, None::<&str>)?;
     Menu::with_items(app, &[&open, &settings, &startup, &separator, &quit])

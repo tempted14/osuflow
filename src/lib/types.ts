@@ -102,15 +102,22 @@ export interface SearchResponse {
   hasMore: boolean;
 }
 
+export type GameClient = "stable" | "lazer";
+
 export interface OsuInstall {
+  client: GameClient;
   exe: string;
   dir: string;
   songsDir: string;
   exclusiveFullscreen: boolean;
-  source: "settings" | "runningProcess" | "registry" | "defaultPath";
+  source: "settings" | "runningProcess" | "registry" | "defaultPath" | "customCommand" | "flatpak";
 }
 
 export interface Settings {
+  gameClient: GameClient;
+  lazerExePath: string | null;
+  lazerDataDir: string | null;
+  lazerLaunchCommand: string | null;
   osuExePath: string | null;
   songsDir: string | null;
   noVideo: boolean;
@@ -119,6 +126,8 @@ export interface Settings {
   hideInstalled: boolean;
   linkHandler: boolean;
   previousBrowser: string | null;
+  winePrefix: string | null;
+  osuLaunchCommand: string | null;
 }
 
 export interface HotkeyStatus {
@@ -161,7 +170,7 @@ export interface DownloadProgressEvent {
   mirror: string;
 }
 
-export type ImportMethod = "launchedOsu" | "movedToSongs";
+export type ImportMethod = "launchedOsu" | "movedToSongs" | "openedInLazer" | "savedForLazer";
 
 /** What the archive is named after, when the caller already has the map's details. */
 export interface NameHint {
@@ -193,6 +202,7 @@ export interface LinkHandlerStatus {
 
 /** One download as the overlay tracks it, built from the `download-*` events. */
 export interface DownloadJob {
+  importMethod?: ImportMethod;
   setId: number;
   label: string;
   state: DownloadState;

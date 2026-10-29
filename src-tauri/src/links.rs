@@ -81,6 +81,8 @@ pub(crate) trait LinkEnv {
 
 fn done_message(method: ImportMethod) -> &'static str {
     match method {
+        ImportMethod::OpenedInLazer => "Sent to osu!lazer",
+        ImportMethod::SavedForLazer => "Downloaded. Open downloads in Settings to import into osu!lazer.",
         ImportMethod::LaunchedOsu => "Added to osu!",
         ImportMethod::MovedToSongs => "Saved to your Songs folder - osu! picks it up when it refreshes",
     }

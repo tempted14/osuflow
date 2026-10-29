@@ -8,17 +8,26 @@ mod handoff;
 mod hotkey;
 mod importer;
 mod library;
+mod launcher;
+mod lazer;
 mod link_url;
 mod links;
 #[cfg(test)]
 mod live_tests;
 mod mirrors;
 mod models;
+mod platform;
+#[cfg(any(unix, test))]
+mod login;
+#[cfg(target_os = "macos")]
+mod macos_panel;
 mod osu_locator;
 mod overlay;
 mod settings;
 mod tray;
 mod ui;
+#[cfg(any(unix, test))]
+mod wine;
 
 use std::{
     sync::{Arc, Mutex, RwLock},
@@ -28,18 +37,27 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         // First, so a second launch (Windows opening a link with osu!flow already running) is
         // caught and handed to the running app before anything else starts.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if argv.iter().any(|arg| arg == "--toggle") {
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || overlay::toggle(&app));
+                return;
+            }
             match link_url::first_link_in_args(argv.into_iter().skip(1)) {
                 Some(url) => links::handle_url(app, url),
                 None => ui::show_settings(app),
             }
         }))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .setup(|app| {
+        .plugin(tauri_plugin_dialog::init());
+    // Constructing the shortcut plugin itself requires X11. Skip it on Wayland, not just registration.
+    if !platform::wayland() { builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build()); }
+    #[cfg(target_os = "macos")]
+    { builder = builder.plugin(tauri_nspanel::init()); }
+    builder.setup(|app| {
             let settings_path = app.path().app_config_dir()?.join("settings.json");
             // Settings kept under the app's earlier name (QuickDirect) move across once.
             settings::migrate_legacy_settings(&settings_path);
@@ -56,6 +74,7 @@ pub fn run() {
             let startup_link = link_url::first_link_in_args(args.iter().cloned());
             // Set by the "Start with Windows" entry: sit in the tray without showing a window.
             let background = args.iter().any(|arg| arg == autostart::BACKGROUND_FLAG);
+            let toggle = args.iter().any(|arg| arg == "--toggle");
 
             let downloads_dir = app.path().app_local_data_dir()?.join("downloads");
             downloader::cleanup_old(&downloads_dir, Duration::from_secs(24 * 3600));
@@ -106,6 +125,9 @@ pub fn run() {
             if let Some(url) = startup_link {
                 // Started by a beatmap link: only the toast shows.
                 links::handle_url(app.handle(), url);
+            } else if toggle {
+                let app = app.handle().clone();
+                tauri::async_runtime::spawn_blocking(move || overlay::show(&app));
             } else if first_run || !background {
                 // Started by hand (or for the first time): say hello. At login nothing shows.
                 ui::show_settings(app.handle());
@@ -122,6 +144,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::platform,
             commands::search,
             commands::download_beatmapset,
             commands::cancel_download,
@@ -135,6 +158,7 @@ pub fn run() {
             commands::hide_overlay,
             commands::toggle_overlay,
             commands::get_hotkey_status,
+            commands::open_downloads_folder,
             commands::set_hotkey,
             commands::open_beatmapset_page,
             commands::get_autostart,

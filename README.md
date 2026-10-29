@@ -15,7 +15,7 @@ Cover art, titles and artists in screenshots belong to their respective owners (
 **Website: [osuflow.github.io](https://osuflow.github.io/)** (screenshots, a try-it demo, the FAQ and the download).
 
 > osu!flow is not affiliated with or endorsed by ppy. It uses public beatmap mirrors, never touches
-> the osu! client's memory or network, and hands maps over exactly like double-clicking an `.osz`.
+> the osu! client's memory or network, and hands maps over through osu!'s file import.
 
 ## Install
 
@@ -28,6 +28,8 @@ Cover art, titles and artists in screenshots belong to their respective owners (
 
 To remove it, use Windows' *Installed apps*. That also removes the *Start with Windows* entry and
 the browser registration, if you turned either on.
+
+**Linux and client preview:** version 3.4.0 adds a **Game client** choice for osu! stable or osu!lazer, with Linux AppImage/deb builds alongside the normal Windows installer. The stable Linux path integrates with [osu-winello](https://github.com/NelloKudo/osu-winello). See the [setup guide and testing limits](docs/client-setup.md). The [3.4.0 experimental release](https://github.com/tempted14/osuflow/releases/tag/v3.4.0) includes these installers. Real-game platform testing is still pending.
 
 ## Using it
 

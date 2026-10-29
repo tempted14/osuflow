@@ -20,6 +20,9 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, State};
 
+#[tauri::command]
+pub fn platform() -> crate::platform::PlatformInfo { crate::platform::info() }
+
 pub struct AppState {
     pub settings: RwLock<Settings>,
     pub settings_path: PathBuf,
@@ -131,6 +134,13 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 #[tauri::command]
 pub fn set_settings(app: AppHandle, state: State<'_, AppState>, settings: Settings) -> Result<Settings> {
     let mut settings = settings.normalized();
+    #[cfg(unix)]
+    if settings.game_client == crate::settings::GameClient::Stable && let Some(command) = &settings.osu_launch_command {
+        crate::wine::custom_launch(command, std::path::Path::new("map.osz"), None)?;
+    }
+    if settings.game_client == crate::settings::GameClient::Lazer && let Some(command) = &settings.lazer_launch_command {
+        crate::launcher::custom_launch(command, std::path::Path::new("map.osz"), None)?;
+    }
     settings.hotkey = state.settings_snapshot().hotkey;
     settings.save(&state.settings_path)?;
     *state.settings.write().unwrap() = settings.clone();
@@ -145,6 +155,11 @@ pub async fn get_installed(state: State<'_, AppState>) -> Result<Vec<u32>> {
     let settings = state.settings_snapshot();
     let library = state.library.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        if settings.game_client == crate::settings::GameClient::Lazer {
+            let files = crate::lazer::detect(&settings).map(|install| install.songs_dir)
+                .or_else(|| crate::lazer::data_dir(&settings).map(|root| root.join("files")));
+            return library.sync_client(files.as_deref(), crate::settings::GameClient::Lazer);
+        }
         let songs = osu_locator::detect(&settings)
             .map(|install| install.songs_dir)
             .or_else(|| settings.songs_dir.clone());
@@ -171,6 +186,15 @@ pub async fn toggle_overlay(app: AppHandle) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || overlay::toggle(&app))
         .await
         .map_err(|e| AppError::Task(e.to_string()))
+}
+
+#[tauri::command]
+pub fn open_downloads_folder(app: AppHandle) -> Result<()> {
+    use tauri::{Manager, path::BaseDirectory};
+    use tauri_plugin_opener::OpenerExt;
+    let path = app.path().resolve("downloads", BaseDirectory::AppLocalData).map_err(|error| AppError::Task(error.to_string()))?;
+    std::fs::create_dir_all(&path)?;
+    app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|error| AppError::Task(error.to_string()))
 }
 
 #[tauri::command]

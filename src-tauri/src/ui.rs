@@ -20,6 +20,11 @@ fn build(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
         .ok_or(tauri::Error::WindowNotFound)?;
     let window = WebviewWindowBuilder::from_config(app, config)?
         .initialization_script(glass::init_script())
+        .initialization_script(format!(
+            "(() => {{ const apply = () => {{ document.documentElement.dataset.platform = '{}'; {} }}; if (document.documentElement) apply(); else document.addEventListener('DOMContentLoaded', apply, {{ once: true }}); }})()",
+            std::env::consts::OS,
+            if cfg!(windows) { "" } else { "document.documentElement.dataset.glass = 'off';" },
+        ))
         .build()?;
     glass::apply(&window);
     Ok(window)
@@ -33,7 +38,11 @@ pub fn ensure(app: &AppHandle, label: &str) -> Option<WebviewWindow> {
 
 /// The windows every start needs: the overlay (hidden) and, while link handling is on, the toast.
 pub fn create_startup_windows(app: &AppHandle, link_handler: bool) -> tauri::Result<()> {
-    build(app, overlay::LABEL)?;
+    let overlay = build(app, overlay::LABEL)?;
+    #[cfg(target_os = "macos")]
+    crate::macos_panel::prepare(&overlay)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = overlay;
     if link_handler {
         build(app, links::TOAST_LABEL)?;
     }

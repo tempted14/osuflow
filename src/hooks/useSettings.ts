@@ -25,13 +25,15 @@ export function useSettings() {
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {
-      if (!settings) return;
+      if (!settings) return false;
       const next = { ...settings, ...patch };
       setSettings(next); // optimistic, so toggles feel instant
       try {
         setSettings(await api.setSettings(next));
+        return true;
       } catch {
         await reload();
+        return false;
       }
     },
     [settings, reload],

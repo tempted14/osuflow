@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { openDownloadsFolder } from "../lib/api";
 import { downloadFraction, downloadLabel } from "../lib/format";
 import { isBusy, pillText, summarizeDownloads } from "../lib/jobs";
 import type { DownloadJob } from "../lib/types";
@@ -20,10 +21,11 @@ export function DownloadsDrawer(props: {
   onOpenPage: (setId: number) => void;
 }) {
   const { jobs } = props;
+  const [folderError, setFolderError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
   const summary = summarizeDownloads(jobs);
-  const working = summary.active > 0 || summary.failed > 0;
+  const working = summary.active > 0 || summary.failed > 0 || (summary.manual ?? 0) > 0 || (summary.lazerManual ?? 0) > 0;
 
   useEffect(() => {
     if (working || open) {
@@ -53,12 +55,13 @@ export function DownloadsDrawer(props: {
               Clear finished
             </button>
           </header>
+          {folderError && <p className="warn note" role="alert">{folderError}</p>}
           <ul>
             {[...jobs].reverse().map((job) => {
               const fraction = downloadFraction(job);
               const mirrorsDown = job.error?.includes("every mirror failed");
               return (
-                <li key={job.setId} className={`dl-row ${job.state}`}>
+                <li key={job.setId} className={`dl-row ${job.state}${job.importMethod === "savedForLazer" || job.importMethod === "movedToSongs" ? " manual" : ""}`}>
                   <div className="dl-line">
                     <span className="dl-name" title={job.label}>
                       {job.label}
@@ -75,6 +78,7 @@ export function DownloadsDrawer(props: {
                           ↻
                         </button>
                       )}
+                      {job.importMethod === "savedForLazer" && <button className="quiet reveal-downloads" onClick={() => void openDownloadsFolder().catch((error) => setFolderError(String(error)))}>Show downloads</button>}
                       {mirrorsDown && (
                         <button
                           className="quiet"

@@ -33,6 +33,19 @@ const calls = (p, name) => json(p, `(window.__calls ?? []).filter((c) => c.cmd =
 const clickEl = (p, selector, index = 0) => ev(p, `document.querySelectorAll(${JSON.stringify(selector)})[${index}].click()`);
 const clickByText = (p, selector, label) =>
   ev(p, `(() => { const e = [...document.querySelectorAll(${JSON.stringify(selector)})].find((x) => x.textContent.trim().startsWith(${JSON.stringify(label)})); if (!e) throw new Error('no ' + ${JSON.stringify(label)}); e.click(); })()`);
+// Inspect a real CSS transition at a fixed progress, independent of a busy CI runner's clock.
+const transitionSample = (p) => ev(p, `(async () => {
+  const wrap = document.querySelector('.fwrap');
+  wrap.style.transitionDuration = '10s'; void wrap.offsetHeight;
+  document.querySelector('.filters-btn').click();
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const animation = wrap.getAnimations().find((animation) => animation.transitionProperty === 'grid-template-rows');
+  if (!animation) throw new Error('Filter transition is missing');
+  animation.pause(); animation.currentTime = 4000;
+  const height = document.querySelector('.fclip').getBoundingClientRect().height;
+  animation.finish(); wrap.style.transitionDuration = '';
+  return height;
+})()`);
 const move = (p, x, y) => p.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', buttons: 0 });
 const mouse = (p, type, x, y) => p.cdp('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
 const KEYS = { Enter: [13, '\r'], ArrowDown: [40], ArrowUp: [38], ArrowLeft: [37], ArrowRight: [39], Escape: [27], ' ': [32, ' '], Home: [36], End: [35] };
@@ -176,9 +189,7 @@ try {
         check('panel starts closed and inert', (await ev(p, "document.querySelector('.fwrap').dataset.open")) === 'false' && (await ev(p, "document.querySelector('.fwrap').inert")) === true);
         check('closed panel takes no room', (await rect(p, '.fclip')).h < 1, String((await rect(p, '.fclip')).h));
         const resultsClosed = await rect(p, '.results');
-        await clickEl(p, '.filters-btn');
-        await sleep(120);
-        const midway = (await rect(p, '.fclip')).h;
+        const midway = await transitionSample(p);
         await sleep(500);
         const opened = (await rect(p, '.fclip')).h;
         check('opening animates (partway, then full height)', midway > 0 && midway < opened, `${midway.toFixed(0)} -> ${opened.toFixed(0)}`);
@@ -242,9 +253,7 @@ try {
         const saved = JSON.parse(await ev(p, "localStorage.getItem('osuflow.browse.v1')"));
         check('slider choices are saved', saved.filters.ranges.stars.max === 7, JSON.stringify(saved.filters.ranges.stars));
         // Closing the panel animates and removes it from the tab order.
-        await clickEl(p, '.filters-btn');
-        await sleep(120);
-        const closing = (await rect(p, '.fclip')).h;
+        const closing = await transitionSample(p);
         await sleep(500);
         check('closing animates down to nothing', closing > 0 && (await rect(p, '.fclip')).h < 1, `${closing.toFixed(0)} -> ${(await rect(p, '.fclip')).h}`);
         check('closed panel is inert and its options are not tabbable', (await ev(p, "document.querySelector('.fwrap').inert")) === true);
