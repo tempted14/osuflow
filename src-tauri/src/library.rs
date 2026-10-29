@@ -134,20 +134,27 @@ impl Library {
         if !changed && client == crate::settings::GameClient::Lazer {
             let mut ids = self.ids.lock().unwrap().iter().copied().collect::<Vec<_>>(); ids.sort_unstable(); return ids;
         }
+        // Register before the initial scan so imports during a large library scan are queued.
+        if changed && client == crate::settings::GameClient::Lazer {
+            *watching = dir.and_then(|dir| self.watch(dir, client));
+        }
+        // A queued watcher callback must reconcile after the snapshot replaces the old index.
+        let mut file_index = self.files.lock().unwrap();
         let file_ids = if client == crate::settings::GameClient::Lazer { dir.map(crate::lazer::scan_files).unwrap_or_default() } else { HashMap::new() };
         let fresh = if client == crate::settings::GameClient::Lazer { file_ids.values().copied().collect() } else { dir.map(scan_songs).unwrap_or_default() };
-        *self.files.lock().unwrap() = file_ids;
+        *file_index = file_ids;
         let delta = {
             let mut ids = self.ids.lock().unwrap();
             let delta = LibraryDelta::between(&ids, &fresh);
             *ids = fresh.clone();
             delta
         };
+        drop(file_index);
         if !delta.is_empty() {
             (self.on_change)(delta);
         }
         match dir {
-            Some(dir) if changed => {
+            Some(dir) if changed && client == crate::settings::GameClient::Stable => {
                 *watching = self.watch(dir, client);
             }
             Some(_) => {}
@@ -165,9 +172,9 @@ impl Library {
         let root = dir.to_path_buf();
         let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
             let Ok(event) = event else { return };
-            // Reading a hash file produces inotify Open/Access events. Processing those would
-            // reopen it forever, starving registration of newly created hash directories.
-            if matches!(event.kind, notify::EventKind::Access(_)) { return; }
+            // Ignore the index's own reads, but retain close-after-write for completed imports.
+            if let notify::EventKind::Access(kind) = event.kind
+                && kind != notify::event::AccessKind::Close(notify::event::AccessMode::Write) { return; }
             if client == crate::settings::GameClient::Lazer {
                 let delta = {
                     let mut files = files.lock().unwrap();
