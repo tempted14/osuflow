@@ -11,16 +11,27 @@ pub struct PlatformInfo {
 }
 
 pub fn wayland() -> bool {
-    cfg!(target_os = "linux") && (std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
-        || std::env::var("XDG_SESSION_TYPE").is_ok_and(|value| value.eq_ignore_ascii_case("wayland")))
+    cfg!(target_os = "linux")
+        && (std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
+            || std::env::var("XDG_SESSION_TYPE")
+                .is_ok_and(|value| value.eq_ignore_ascii_case("wayland")))
 }
 
 pub fn info() -> PlatformInfo {
-    PlatformInfo { os: std::env::consts::OS, wayland: wayland(), default_hotkey: crate::hotkey::DEFAULT_HOTKEY, experimental: !cfg!(windows) }
+    PlatformInfo {
+        os: std::env::consts::OS,
+        wayland: wayland(),
+        default_hotkey: crate::hotkey::DEFAULT_HOTKEY,
+        experimental: !cfg!(windows),
+    }
 }
 
 pub fn autostart_label() -> &'static str {
-    if cfg!(windows) { "Start with Windows" } else { "Start at login" }
+    if cfg!(windows) {
+        "Start with Windows"
+    } else {
+        "Start at login"
+    }
 }
 
 #[cfg(test)]
@@ -31,7 +42,11 @@ mod tests {
         let info = info();
         assert_eq!(info.experimental, !cfg!(windows));
         assert_eq!(info.default_hotkey, crate::hotkey::DEFAULT_HOTKEY);
-        if cfg!(windows) { assert!(!info.wayland); assert_eq!(autostart_label(), "Start with Windows"); }
-        else { assert_eq!(autostart_label(), "Start at login"); }
+        if cfg!(windows) {
+            assert!(!info.wayland);
+            assert_eq!(autostart_label(), "Start with Windows");
+        } else {
+            assert_eq!(autostart_label(), "Start at login");
+        }
     }
 }

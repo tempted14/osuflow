@@ -1850,3 +1850,12 @@ html[data-platform="macos"] { --font: -apple-system, system-ui, sans-serif; --fo
   .flyout[aria-multiselectable="true"] .flyout-item { padding-left: 12px; }
   .panel .card:not(.ghost) { animation: none; }
 }
+
+.client-choice select { width: 170px; max-width: 60%; padding: 7px 10px; color: var(--text); background: var(--tint); border: 1px solid var(--stroke-strong); border-radius: var(--radius-sm); font: inherit; }
+.client-choice select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.path-field { margin: 12px 0; }
+.path-field > label { display: block; margin: 0 0 5px; color: var(--text-2); }
+.path-picker { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.path-picker input { flex: 1; width: 0; min-width: 0; }
+.path-picker button { flex: none; white-space: nowrap; }
+.lazer-settings > strong { display: block; }

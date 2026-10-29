@@ -3,13 +3,14 @@ import type { KeyboardEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as api from "../lib/api";
 import { LinkSettings } from "../components/LinkSettings";
+import { LazerSettings } from "../components/LazerSettings";
 import { WineSettings } from "../components/WineSettings";
 import { displayHotkey } from "../lib/platform";
 import type { PlatformInfo } from "../lib/platform";
 import { Logo } from "../components/Logo";
 import { useSettings } from "../hooks/useSettings";
 import { hotkeyFromEvent } from "../lib/hotkey";
-import type { HotkeyStatus, OsuInstall } from "../lib/types";
+import type { HotkeyStatus, OsuInstall, GameClient } from "../lib/types";
 
 
 /** One labelled switch; the whole row toggles it. */
@@ -38,10 +39,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [autostartError, setAutostartError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const lazer = settings?.gameClient === "lazer";
 
   useEffect(() => {
     api.platform().then(setPlatform).catch(() => undefined);
-    api.detectOsu().then(setInstall).catch(() => setInstall(null));
     api.getHotkeyStatus().then(setStatus).catch(() => undefined);
     api.getAutostart().then(setAutostart).catch(() => setAutostart(false));
     // The tray menu can switch it too.
@@ -50,6 +52,14 @@ export default function Home() {
       void unlisten.then((stop) => stop());
     };
   }, []);
+
+  useEffect(() => {
+    if (!settings) return;
+    let current = true; setInstall(undefined);
+    api.detectOsu().then((install) => { if (current) setInstall(install); }).catch(() => { if (current) setInstall(null); });
+    void api.getInstalled().catch(() => undefined);
+    return () => { current = false; };
+  }, [settings?.gameClient, settings?.lazerExePath, settings?.lazerDataDir, settings?.lazerLaunchCommand, settings?.osuExePath, settings?.songsDir, settings?.winePrefix]);
 
   const toggleAutostart = async (enabled: boolean) => {
     setAutostart(enabled); // optimistic, so the switch feels instant
@@ -103,19 +113,30 @@ export default function Home() {
         </button>
       </header>
 
-      {platform?.experimental && <p className="note warn">Experimental support for osu! stable under Wine. This build still needs testing on real systems.</p>}
+      {platform?.experimental && <p className="note warn">Experimental support for Linux and macOS. This build still needs testing on real systems.</p>}
       {platform?.wayland && <p className="note">Wayland does not support this global shortcut. Use Search maps in the tray, or bind <code>osuflow --toggle</code> in your keyboard settings.</p>}
 
+      <label className="setting client-choice">
+        <strong>Game client</strong>
+        <select aria-label="Game client" value={settings?.gameClient ?? "stable"} disabled={!settings} onChange={(event) => {
+          setClientError(null); void update({ gameClient: event.target.value as GameClient }).then((ok) => { if (!ok) setClientError("Couldn't save the client choice. Try again."); });
+        }}>
+          <option value="stable">osu! stable</option>
+          <option value="lazer">osu!lazer</option>
+        </select>
+      </label>
+      {clientError && <p className="warn note" role="alert">{clientError}</p>}
+      {lazer && <p className="note">Lazer imports are experimental and still need native game testing. Search, previews and downloads work the same.</p>}
       <div className="setting">
         <div className="setting-text">
-          <strong>osu!</strong>
+          <strong>{lazer ? "osu!lazer" : "osu!"}</strong>
           {install === undefined && <small>Looking…</small>}
           {install === null && (
-            <small className="warn">Not found. {platform?.experimental ? "Choose the osu! stable executable or Songs folder below." : "Maps are saved, but can't be imported until osu! is installed."}</small>
+            <small className="warn">Not found. {lazer ? "Choose the osu!lazer application below." : platform?.experimental ? "Choose the osu! stable executable or Songs folder below." : "Maps are saved, but can't be imported until osu! is installed."}</small>
           )}
           {install && (
-            <small className="path" title={`${install.exe}\nMaps go into ${install.songsDir}`}>
-              {install.dir}
+            <small className="path" title={`${install.exe}\n${lazer ? "Lazer library" : "Maps go into"} ${install.songsDir}`}>
+              {install.source === "customCommand" ? "Custom launcher" : install.source === "flatpak" ? "Flatpak (sh.ppy.osu)" : install.dir}
             </small>
           )}
           {install?.exclusiveFullscreen && (
@@ -125,6 +146,7 @@ export default function Home() {
         {install && <span className="status-dot" role="img" aria-label="osu! found" />}
       </div>
 
+      {lazer && <LazerSettings settings={settings} onSave={update} />}
       <div className="setting">
         <strong>Shortcut</strong>
         <div className="actions">
@@ -168,7 +190,8 @@ export default function Home() {
       {autostartError && <p className="warn note">{autostartError}</p>}
 
       {platform?.os === "windows" && <LinkSettings />}
-      {platform?.experimental && <WineSettings settings={settings} onSave={update} onSaved={() => { void api.detectOsu().then(setInstall).catch(() => setInstall(null)); void api.getInstalled().catch(() => undefined); }} />}
+      {!lazer && platform?.experimental && <WineSettings settings={settings} onSave={update} onSaved={() => { void api.detectOsu().then(setInstall).catch(() => setInstall(null)); void api.getInstalled().catch(() => undefined); }} />}
+      <p className="note"><button className="link" onClick={() => void api.openDownloadsFolder().catch((failure) => setError(String(failure)))}>Open downloads folder</button></p>
     </main>
   );
 }

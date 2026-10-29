@@ -16,11 +16,14 @@ pub enum DetectSource {
     RunningProcess,
     Registry,
     DefaultPath,
+    CustomCommand,
+    Flatpak,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OsuInstall {
+    pub client: crate::settings::GameClient,
     pub exe: PathBuf,
     pub dir: PathBuf,
     pub songs_dir: PathBuf,
@@ -32,6 +35,7 @@ pub struct OsuInstall {
 /// Settings override, then a running osu!, then the .osz file association, then the default
 /// install folder. osu!lazer is skipped: it is also called `osu!.exe`.
 pub fn detect(settings: &Settings) -> Option<OsuInstall> {
+    if settings.game_client == crate::settings::GameClient::Lazer { return crate::lazer::detect(settings); }
     let songs_override = settings.songs_dir.clone();
     let username = std::env::var(if cfg!(windows) { "USERNAME" } else { "USER" }).ok();
     let build = |exe: PathBuf, source: DetectSource| {
@@ -160,7 +164,7 @@ fn build_install(
         songs_dir_from_cfg(&dir, &cfg)
     });
     OsuInstall {
-        songs_dir,
+        client: crate::settings::GameClient::Stable, songs_dir,
         exclusive_fullscreen: cfg.get("Fullscreen").is_some_and(|v| v == "1"),
         exe,
         dir,

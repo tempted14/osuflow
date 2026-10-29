@@ -277,7 +277,7 @@ struct StandInOsu {
 impl crate::handoff::OsuEnv for StandInOsu {
     fn install(&self, _settings: &Settings) -> Option<osu_locator::OsuInstall> {
         Some(osu_locator::OsuInstall {
-            exe: "osu!.exe".into(),
+            client: crate::settings::GameClient::Stable, exe: "osu!.exe".into(),
             dir: self.songs.clone(),
             songs_dir: self.songs.clone(),
             exclusive_fullscreen: false,

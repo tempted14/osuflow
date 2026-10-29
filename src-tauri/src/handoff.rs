@@ -267,7 +267,19 @@ impl Handoff {
         wait_for_exclusive_access(archive, self.timing.unlock_timeout, self.timing.unlock_poll).await?;
 
         let for_env = settings.clone();
-        let Some(install) = self.blocking(move |env| env.install(&for_env)).await? else {
+        let install = self.blocking(move |env| env.install(&for_env)).await?;
+        if settings.game_client == crate::settings::GameClient::Lazer {
+            // Lazer imports archives through its own native IPC/file argument. Never copy into
+            // its content-addressed store or use stable's Songs/F5 fallback. Keep the archive
+            // for async import/recovery; success here means the request was sent, not verified.
+            let Some(install) = install.filter(|install| install.client == crate::settings::GameClient::Lazer) else { return Ok(ImportMethod::SavedForLazer); };
+            let archive = archive.to_path_buf(); let settings = settings.clone();
+            return Ok(match self.blocking(move |env| env.launch(&install, &archive, &settings)).await? {
+                Ok(()) => ImportMethod::OpenedInLazer,
+                Err(_) => ImportMethod::SavedForLazer,
+            });
+        }
+        let Some(install) = install else {
             // No osu! to launch; drop the archive in Songs if we know where that is.
             return importer::place_in_songs(archive, settings.songs_dir.as_deref(), None);
         };
@@ -537,7 +549,7 @@ mod tests {
         let songs = dir.path().join("Songs");
         std::fs::create_dir_all(&songs).unwrap();
         let install = OsuInstall {
-            exe: dir.path().join("osu!.exe"),
+            client: crate::settings::GameClient::Stable, exe: dir.path().join("osu!.exe"),
             dir: dir.path().to_path_buf(),
             songs_dir: songs.clone(),
             exclusive_fullscreen: false,
@@ -563,6 +575,21 @@ mod tests {
                 std::thread::sleep(delay);
                 std::fs::create_dir_all(folder).unwrap();
             });
+        }
+    }
+
+    #[tokio::test]
+    async fn lazer_uses_native_handoff_and_never_writes_a_songs_or_hash_store_fallback() {
+        let mut world = world(); world.install.client = crate::settings::GameClient::Lazer;
+        let archive = archive(&world, 12);
+        let settings = Settings { game_client: crate::settings::GameClient::Lazer, songs_dir: Some(world.songs.clone()), ..Settings::default() };
+        let env = Arc::new(FakeEnv::new(Some(world.install.clone()), not_running()));
+        assert_eq!(Handoff::with_timing(env.clone(), quick()).hand_off(&archive, 12, &settings).await.unwrap(), ImportMethod::OpenedInLazer);
+        assert_eq!(env.launched().len(), 1); assert!(archive.exists()); assert_eq!(std::fs::read_dir(&world.songs).unwrap().count(), 0);
+        let mut failed = FakeEnv::new(Some(world.install), not_running()); failed.launch_fails = true;
+        for env in [Arc::new(failed), Arc::new(FakeEnv::new(None, not_running()))] {
+            assert_eq!(Handoff::with_timing(env, quick()).hand_off(&archive, 12, &settings).await.unwrap(), ImportMethod::SavedForLazer);
+            assert!(archive.exists()); assert_eq!(std::fs::read_dir(&world.songs).unwrap().count(), 0);
         }
     }
 

@@ -17,6 +17,8 @@ use std::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportMethod {
+    OpenedInLazer,
+    SavedForLazer,
     /// osu! was started (or, if already running, was handed the file).
     LaunchedOsu,
     /// The archive was placed in the Songs folder.
@@ -137,6 +139,7 @@ pub fn launch_osu(install: &OsuInstall, osz: &Path) -> std::io::Result<()> {
 }
 
 pub fn launch_with_settings(install: &OsuInstall, osz: &Path, settings: &crate::settings::Settings) -> std::io::Result<()> {
+    if settings.game_client == crate::settings::GameClient::Lazer { return crate::lazer::launch(install, osz, settings); }
     #[cfg(windows)] { let _ = settings; launch_osu(install, osz) }
     #[cfg(unix)] { crate::wine::launch(install, osz, settings) }
 }
@@ -193,7 +196,7 @@ mod tests {
         let songs = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
         let install = OsuInstall {
-            exe: downloads.path().join("not-osu.exe"),
+            client: crate::settings::GameClient::Stable, exe: downloads.path().join("not-osu.exe"),
             dir: downloads.path().to_path_buf(),
             songs_dir: songs.path().to_path_buf(),
             exclusive_fullscreen: false,
@@ -209,7 +212,7 @@ mod tests {
         let downloads = tempfile::tempdir().unwrap();
         let osz = osz_in(downloads.path());
         let install = OsuInstall {
-            exe: downloads.path().join("not-osu.exe"),
+            client: crate::settings::GameClient::Stable, exe: downloads.path().join("not-osu.exe"),
             dir: downloads.path().to_path_buf(),
             songs_dir: downloads.path().join("nope"),
             exclusive_fullscreen: false,
@@ -293,7 +296,7 @@ mod tests {
     #[cfg(windows)]
     fn install_at(exe: &Path, dir: &Path, songs: &Path) -> OsuInstall {
         OsuInstall {
-            exe: exe.to_path_buf(),
+            client: crate::settings::GameClient::Stable, exe: exe.to_path_buf(),
             dir: dir.to_path_buf(),
             songs_dir: songs.to_path_buf(),
             exclusive_fullscreen: false,

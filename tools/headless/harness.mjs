@@ -15,17 +15,18 @@ export async function start() {
 }
 export function mockScript(label, extra = {}) {
   const platform = extra.platform ?? { os: "windows", wayland: false, defaultHotkey: "Ctrl+Shift+D", experimental: false };
-  const settings = { winePrefix: null, osuLaunchCommand: null, osuExePath: null, songsDir: null, noVideo: true, mirrorOrder: ['catboy', 'osuDirect'], hotkey: platform.defaultHotkey, hideInstalled: false, linkHandler: false, previousBrowser: null, ...extra.settings };
+  const settings = { gameClient: "stable", lazerExePath: null, lazerDataDir: null, lazerLaunchCommand: null, winePrefix: null, osuLaunchCommand: null, osuExePath: null, songsDir: null, noVideo: true, mirrorOrder: ['catboy', 'osuDirect'], hotkey: platform.defaultHotkey, hideInstalled: false, linkHandler: false, previousBrowser: null, ...extra.settings };
   const data = {
     sets,
     installed: extra.installed ?? [sets[2].id, sets[5].id],
     settings,
     platform,
     importMethod: extra.importMethod ?? null,
+    dialogPaths: extra.dialogPaths ?? [],
     label,
     link: extra.link ?? { enabled: false, registered: false, isDefault: false, previousBrowser: 'chrome.exe' },
     install: extra.install === undefined
-      ? { exe: 'C:\\Users\\Player\\AppData\\Local\\osu!\\osu!.exe', dir: 'C:\\Users\\Player\\AppData\\Local\\osu!', songsDir: 'C:\\Users\\Player\\AppData\\Local\\osu!\\Songs', exclusiveFullscreen: false, source: 'runningProcess' }
+      ? { client: settings.gameClient, exe: 'C:\\Users\\Player\\AppData\\Local\\osu!\\osu!.exe', dir: 'C:\\Users\\Player\\AppData\\Local\\osu!', songsDir: 'C:\\Users\\Player\\AppData\\Local\\osu!\\Songs', exclusiveFullscreen: false, source: 'runningProcess' }
       : extra.install,
     hasMore: extra.hasMore ?? false,
     prefs: extra.prefs ?? null,
@@ -53,6 +54,8 @@ export function mockScript(label, extra = {}) {
           case 'plugin:event|unlisten': return;
           case 'plugin:event|emit': window.__emit(args.event, args.payload); return;
           case 'platform': return D.platform;
+          case 'plugin:dialog|open': return D.dialogPaths.shift() ?? null;
+          case 'open_downloads_folder': return null;
           case 'download_beatmapset': return D.importMethod;
           case 'set_hotkey': D.hotkeyStatus = { hotkey: args.hotkey, registered: true, error: null }; return D.hotkeyStatus;
           case 'get_settings': return D.settings;
@@ -63,7 +66,10 @@ export function mockScript(label, extra = {}) {
             return { results: D.sets, mirror: 'osuDirect', sortApplied: true, hasMore: D.hasMore };
           case 'lookup_beatmapset': { const s = D.sets.find((x) => x.id === args.setId); if (!s) throw 'not found'; return s; }
           case 'resolve_set_id': { const s = D.sets.find((x) => x.beatmaps.some((b) => b.id === args.beatmapId)); if (!s) throw 'not found'; return s.id; }
-          case 'detect_osu': return D.install;
+          case 'detect_osu':
+            if (D.settings.gameClient !== 'lazer' || D.install?.client === 'lazer') return D.install;
+            if (!D.settings.lazerExePath && !D.settings.lazerLaunchCommand) return null;
+            return { client: 'lazer', exe: D.settings.lazerExePath ?? '', dir: D.settings.lazerExePath ?? 'Custom launcher', songsDir: (D.settings.lazerDataDir ?? '/home/player/.local/share/osu') + '/files', exclusiveFullscreen: false, source: D.settings.lazerLaunchCommand ? 'customCommand' : 'settings' };
           case 'get_hotkey_status': return D.hotkeyStatus;
           case 'get_autostart': return D.autostart;
           case 'get_link_handler_status': return D.link;
@@ -95,6 +101,7 @@ export async function render({ name, label, width, height, steps, extra, verifyI
   };
   await call('Page.enable');
   await call('Runtime.enable');
+  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: Number(process.env.SCALE ?? 1), mobile: false });
   await call('Page.addScriptToEvaluateOnNewDocument', { source: mockScript(label, extra) });
   await call('Page.navigate', { url: server.url + '?' + Date.now() });

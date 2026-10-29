@@ -2,11 +2,19 @@ use crate::{hotkey::DEFAULT_HOTKEY, mirrors::MirrorId};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GameClient { #[default] Stable, Lazer }
+
 /// User settings, stored as JSON in the app config dir. Unknown or missing keys are fine, so
 /// older and newer builds can share a file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub game_client: GameClient,
+    pub lazer_exe_path: Option<PathBuf>,
+    pub lazer_data_dir: Option<PathBuf>,
+    pub lazer_launch_command: Option<String>,
     /// Override for `osu!.exe`; `None` means auto-detect.
     pub osu_exe_path: Option<PathBuf>,
     /// Override for the Songs folder; `None` means read it from osu!'s own config.
@@ -32,6 +40,10 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            game_client: GameClient::Stable,
+            lazer_exe_path: None,
+            lazer_data_dir: None,
+            lazer_launch_command: None,
             osu_exe_path: None,
             songs_dir: None,
             wine_prefix: None,
@@ -100,6 +112,9 @@ impl Settings {
         self.mirror_order = order;
         self.osu_exe_path = self.osu_exe_path.filter(|p| !p.as_os_str().is_empty());
         self.songs_dir = self.songs_dir.filter(|p| !p.as_os_str().is_empty());
+        self.lazer_exe_path = self.lazer_exe_path.filter(|path| !path.as_os_str().is_empty());
+        self.lazer_data_dir = self.lazer_data_dir.filter(|path| !path.as_os_str().is_empty());
+        self.lazer_launch_command = self.lazer_launch_command.map(|command| command.trim().to_owned()).filter(|command| !command.is_empty());
         self.wine_prefix = self.wine_prefix.filter(|path| !path.as_os_str().is_empty());
         self.osu_launch_command = self.osu_launch_command.map(|command| command.trim().to_owned()).filter(|command| !command.is_empty());
         #[cfg(not(windows))]

@@ -88,12 +88,15 @@ jobs:
         run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
         working-directory: src-tauri
       - name: Build installers
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          NO_STRIP: "true"
+        run: npm run tauri build -- --verbose --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Headless UI checks
         if: matrix.platform == 'windows'
         run: |
           node tools/headless/regress.mjs
           node tools/headless/platforms.mjs
+          node tools/headless/clients.mjs
       - name: Stage Windows installer for signing
         if: matrix.platform == 'windows'
         id: stage
@@ -166,7 +169,7 @@ jobs:
           SIGNED: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
         run: |
           {
-            echo "Linux and macOS builds are **experimental**, for osu! stable under Wine only. They are unsigned and have not been confirmed by platform testers."
+            echo "This preview adds a stable/lazer client choice and **experimental** Linux/macOS builds. Linux stable integrates with osu-winello; lazer imports use the native client. Linux/macOS installers are unsigned. Real-game compatibility has not been confirmed by platform testers."
             echo
             echo "Windows: download the x64 setup.exe. Linux: use the AppImage or deb. macOS: choose the Apple Silicon (aarch64) or Intel (x64) dmg; allow the app in System Settings > Privacy & Security > Open Anyway."
             echo
@@ -176,7 +179,7 @@ jobs:
               echo "Windows installers are not code-signed. SmartScreen may require More info > Run anyway."
             fi
             echo
-            echo "See docs/experimental-wine.md for Wine setup, the Wayland toggle, and known limitations."
+            echo "See [client setup and limitations](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/client-setup.md) for osu-winello, lazer, the Wayland toggle and manual import recovery."
             echo
             echo '```text'
             (cd release && sha256sum *)
@@ -190,5 +193,5 @@ jobs:
             gh release upload "$TAG" release/* --clobber
             gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$TAG" release/* --draft --prerelease --title "osu!flow $TAG — experimental Wine support" --notes-file notes.md
+            gh release create "$TAG" release/* --draft --prerelease --title "osu!flow $TAG — experimental Linux and client support" --notes-file notes.md
           fi

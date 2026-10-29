@@ -95,7 +95,11 @@ pub struct OsuSnapshot {
 }
 
 pub fn snapshot_osu() -> OsuSnapshot {
-    let pids: Vec<u32> = osu_locator::running_osu_processes().into_iter().map(|(pid, _)| pid).collect();
+    snapshot_client(crate::settings::GameClient::Stable)
+}
+
+fn snapshot_client(client: crate::settings::GameClient) -> OsuSnapshot {
+    let pids: Vec<u32> = (if client == crate::settings::GameClient::Lazer { crate::lazer::running() } else { osu_locator::running_osu_processes() }).into_iter().map(|(pid, _)| pid).collect();
     snapshot_for_pids(pids)
 }
 
@@ -106,8 +110,11 @@ pub fn snapshot_for_pids(pids: Vec<u32>) -> OsuSnapshot {
     OsuSnapshot { pids, windows, window_inspection: cfg!(windows) }
 }
 
-pub fn locate_osu_window() -> OsuWindow {
-    let snapshot = snapshot_osu();
+#[cfg(test)]
+pub fn locate_osu_window() -> OsuWindow { locate_client_window(crate::settings::GameClient::Stable) }
+
+fn locate_client_window(client: crate::settings::GameClient) -> OsuWindow {
+    let snapshot = snapshot_client(client);
     OsuWindow { running: !snapshot.pids.is_empty(), window: pick_main_window(&snapshot.windows) }
 }
 
@@ -163,7 +170,7 @@ pub fn show(app: &AppHandle) {
     let state = app.state::<AppState>();
     let settings = state.settings.read().unwrap().clone();
 
-    let osu = locate_osu_window();
+    let osu = locate_client_window(settings.game_client);
     let install = osu_locator::detect(&settings);
     let bounds = osu.window.map(|w| w.rect).or_else(|| primary_monitor_rect(app));
     if let Some(bounds) = bounds {

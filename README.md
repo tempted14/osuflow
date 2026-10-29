@@ -29,7 +29,7 @@ Cover art, titles and artists in screenshots belong to their respective owners (
 To remove it, use Windows' *Installed apps*. That also removes the *Start with Windows* entry and
 the browser registration, if you turned either on.
 
-**Linux/macOS preview:** version 3.4.0 is being prepared for osu! stable under Wine. See the [experimental setup guide and testing checklist](docs/experimental-wine.md). Native platform testing is still pending; the current public release remains Windows-only.
+**Linux and client preview:** version 3.4.0 adds a **Game client** choice for osu! stable or osu!lazer, with Linux AppImage/deb builds alongside the normal Windows installer. The stable Linux path integrates with [osu-winello](https://github.com/NelloKudo/osu-winello). See the [setup guide and testing limits](docs/client-setup.md). Native platform testing is still pending; the current public release remains Windows-only.
 
 ## Using it
 

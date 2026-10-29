@@ -16,7 +16,7 @@
         "create": false,
         "title": "osu!flow",
         "width": 500,
-        "height": 440,
+        "height": 520,
         "minWidth": 420,
         "minHeight": 340,
         "center": true,

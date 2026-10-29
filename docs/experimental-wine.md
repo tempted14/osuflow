@@ -1,6 +1,6 @@
 # Experimental osu! stable support on Linux and macOS
 
-Version 3.4.0 adds an experimental Wine path. **It still needs testing on real Linux and macOS machines.** CI builds and unit tests do not confirm that an overlay works above a game, that a Wine wrapper accepts an archive, or that an installer works on a particular desktop. osu!lazer is outside this feature's scope.
+Version 3.4.0 adds an experimental Wine path. **It still needs testing on real Linux and macOS machines.** CI builds and unit tests do not confirm that an overlay works above a game, that a Wine wrapper accepts an archive, or that an installer works on a particular desktop. The app now also has a separate native osu!lazer mode; see the [client setup guide](client-setup.md). This page covers stable through Wine.
 
 Until a release is published, test installers are attached to successful runs of the repository's **Release** workflow on the `codex/wine-platform-support` branch. The website continues to offer the released Windows version.
 
@@ -21,7 +21,7 @@ Open osu!flow Settings. If automatic detection fails, expand **Wine and install 
 | Wine prefix | An existing absolute prefix folder containing `drive_c`. Leave blank for automatic detection. |
 | Custom launch command | An optional executable and arguments. `{file}` becomes one archive argument. Quote paths containing spaces; this runs directly, with no shell expansion. |
 
-For example, `osu-wine --osuhandler "{file}"` uses an available osu-winello wrapper. A wrapper outside `PATH` needs its full quoted path. For a particular generic Wine install, set its prefix and use `wine start /unix "{file}"`. A macOS wrapper may need its own executable and bottle arguments; use the wrapper's documented file-opening command. Do not include shell assignments, pipes, `~`, or `$HOME` in the command; use the Wine prefix field and absolute paths instead. Clear a field to return it to automatic detection.
+For example, `osu-wine --osuhandler "{file}"` uses an available osu-winello wrapper. The standard osu-winello launcher is also found outside `PATH` in `BINDIR` or `~/.local/bin`. Another wrapper outside those locations needs its full quoted path. For a particular generic Wine install, set its prefix and use `wine start /unix "{file}"`. A macOS wrapper may need its own executable and bottle arguments; use the wrapper's documented file-opening command. Do not include shell assignments, pipes, `~`, or `$HOME` in the command; use the Wine prefix field and absolute paths instead. Clear a field to return it to automatic detection.
 
 Detection checks a configured prefix first, running osu! Wine processes, osu-winello's game-directory pointer, and common prefix locations. Windows `C:` and `Z:` paths in the game's configuration are translated to host paths; additional drive mappings are resolved from `dosdevices` when available. A configured Songs folder takes precedence.
 
@@ -31,7 +31,7 @@ On Linux X11 the default shortcut is **Ctrl+Shift+D**. On macOS it is **Command+
 
 On Wayland, global shortcut registration is disabled. Bind the installed executable with `--toggle` in the desktop/compositor's shortcut settings, for example `/home/player/Applications/osuflow.AppImage --toggle`. An existing instance receives the command; a first launch opens search too. Tray → **Search maps** is another option. Wayland compositors may ignore always-on-top requests, so borderless/windowed osu! may work better than fullscreen.
 
-The importer tries `osu-wine --osuhandler` when available, then generic `wine start /unix` with the detected prefix. An explicit prefix bypasses automatic osu-winello routing to avoid opening a different installation. A custom command replaces these automatic launch choices.
+The importer uses `osu-wine --osuhandler` when available on `PATH`, in `BINDIR`, or under `~/.local/bin`. The wrapper owns its prefix and patched runtime. If that helper fails, recovery uses Songs; it does not switch Wine runtimes. Generic `wine start /unix` is used when the wrapper is unavailable or an explicit prefix selects generic Wine. An explicit prefix bypasses automatic osu-winello routing to avoid opening a different installation. A custom command replaces these automatic launch choices.
 
 The hand-off checks whether osu! consumes the archive. If launching fails or the archive remains unconsumed, it falls back to copying it into the selected Songs folder. **When the UI says “Saved to Songs — press F5 in song select”, return to song select and press F5.** Copying a map to Songs is not confirmation that the game imported it.
 

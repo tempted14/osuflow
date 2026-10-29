@@ -8,6 +8,8 @@ mod handoff;
 mod hotkey;
 mod importer;
 mod library;
+mod launcher;
+mod lazer;
 mod link_url;
 mod links;
 #[cfg(test)]
@@ -49,7 +51,8 @@ pub fn run() {
                 None => ui::show_settings(app),
             }
         }))
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init());
     // Constructing the shortcut plugin itself requires X11. Skip it on Wayland, not just registration.
     if !platform::wayland() { builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build()); }
     #[cfg(target_os = "macos")]
@@ -155,6 +158,7 @@ pub fn run() {
             commands::hide_overlay,
             commands::toggle_overlay,
             commands::get_hotkey_status,
+            commands::open_downloads_folder,
             commands::set_hotkey,
             commands::open_beatmapset_page,
             commands::get_autostart,
