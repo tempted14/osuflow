@@ -4,6 +4,14 @@ Search and download osu! beatmaps without leaving the game. Press a hotkey in os
 click a map, and a moment later it is in song select. A free take on osu!direct, built as a small
 background app for Windows 11.
 
+![osu!flow search overlay showing real ranked beatmaps](docs/images/overlay.webp)
+
+| Filters and ranges | Show categories | Settings |
+| --- | --- | --- |
+| <img src="docs/images/filters.webp" width="280" alt="Filters and range sliders"> | <img src="docs/images/show.webp" width="280" alt="Show menu with Ranked, Loved and Qualified selected"> | <img src="docs/images/settings.webp" width="280" alt="osu!flow settings"> |
+
+Cover art, titles and artists in screenshots belong to their respective owners (ppy, mappers, artists); osu!flow includes none of them.
+
 **Website: [osuflow.github.io](https://osuflow.github.io/)** (screenshots, a try-it demo, the FAQ and the download).
 
 > osu!flow is not affiliated with or endorsed by ppy. It uses public beatmap mirrors, never touches
@@ -133,4 +141,4 @@ name (QuickDirect) is copied across on first start.
 
 ## License
 
-[MIT](LICENSE). osu! and its assets belong to ppy; none of them are included here.
+[MIT](LICENSE). osu! and its assets belong to ppy; the app includes none of them.
