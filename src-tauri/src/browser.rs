@@ -19,10 +19,14 @@ use std::{
 
 pub const APP_NAME: &str = "osu!flow";
 /// The class Windows uses for http(s) links while osu!flow is the default browser.
+#[cfg(windows)]
 pub const PROG_ID: &str = "OsuFlowURL";
 
+#[cfg(windows)]
 const CLIENT_KEY: &str = r"Software\Clients\StartMenuInternet\osuflow";
+#[cfg(windows)]
 const CAPABILITIES_KEY: &str = r"Software\Clients\StartMenuInternet\osuflow\Capabilities";
+#[cfg(windows)]
 const REGISTERED_APPS_KEY: &str = r"Software\RegisteredApplications";
 
 #[cfg(windows)]
@@ -405,6 +409,7 @@ pub fn open_in_browser(browser: &Path, url: &Url) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
     use std::time::{Duration, Instant};
 
     #[cfg(windows)]

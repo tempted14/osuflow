@@ -1,9 +1,12 @@
 //! Only the overlay is an NSPanel, so it can join a fullscreen game's Space.
 use tauri::{AppHandle, WebviewWindow};
-use tauri_nspanel::{ManagerExt, WebviewWindowExt, cocoa::appkit::NSWindowCollectionBehavior};
+use tauri_nspanel::{ManagerExt, WebviewWindowExt};
 
 /// Called once during setup, on AppKit's main thread, before the hidden overlay can be shown.
+// The pinned v2 plugin takes Cocoa bitflags; keep its compatibility allowance local.
+#[allow(deprecated)]
 pub fn prepare(window: &WebviewWindow) -> tauri::Result<()> {
+    use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
     let panel = window.to_panel()?;
     panel.set_style_mask(1 << 7); // NSWindowStyleMaskNonactivatingPanel, borderless.
     panel.set_level(25); // NSStatusWindowLevel: visible above fullscreen game windows.

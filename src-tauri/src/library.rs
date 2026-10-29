@@ -119,6 +119,12 @@ impl Library {
     pub fn sync(&self, songs_dir: Option<&Path>) -> Vec<u32> {
         let mut watching = self.watching.lock().unwrap();
         let dir = songs_dir.filter(|dir| dir.is_dir());
+        // FSEvents reports canonical paths (/private/var rather than /var on macOS).
+        // Watch and compare the same root, including when Songs is reached through a symlink.
+        #[cfg(unix)]
+        let canonical = dir.map(|dir| std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()));
+        #[cfg(unix)]
+        let dir = canonical.as_deref();
         let fresh = dir.map(scan_songs).unwrap_or_default();
         let delta = {
             let mut ids = self.ids.lock().unwrap();

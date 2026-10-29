@@ -20,7 +20,11 @@ fn build(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
         .ok_or(tauri::Error::WindowNotFound)?;
     let window = WebviewWindowBuilder::from_config(app, config)?
         .initialization_script(glass::init_script())
-        .initialization_script(format!("document.documentElement.dataset.platform = '{}'", std::env::consts::OS))
+        .initialization_script(format!(
+            "(() => {{ const apply = () => {{ document.documentElement.dataset.platform = '{}'; {} }}; if (document.documentElement) apply(); else document.addEventListener('DOMContentLoaded', apply, {{ once: true }}); }})()",
+            std::env::consts::OS,
+            if cfg!(windows) { "" } else { "document.documentElement.dataset.glass = 'off';" },
+        ))
         .build()?;
     glass::apply(&window);
     Ok(window)

@@ -211,10 +211,10 @@ pub fn show(app: &AppHandle) {
 
 /// Hides the overlay. `refocus` hands keyboard focus back to the window that had it before.
 pub fn hide(app: &AppHandle, refocus: bool) {
-    let Some(window) = app.get_webview_window(LABEL) else { return };
+    let Some(_window) = app.get_webview_window(LABEL) else { return };
     let _ = app.emit_to(LABEL, "overlay-hidden", ());
     #[cfg(not(target_os = "macos"))]
-    let _ = window.hide();
+    let _ = _window.hide();
     #[cfg(target_os = "macos")]
     crate::macos_panel::hide(app);
     let target = app.state::<AppState>().overlay.take_return_target();

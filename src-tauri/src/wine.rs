@@ -224,7 +224,7 @@ mod tests {
         std::fs::create_dir_all(root.path().join("dosdevices")).unwrap();
         let maps = root.path().join("Mounted Maps"); std::fs::create_dir(&maps).unwrap();
         symlink(&maps, root.path().join("dosdevices/d:")).unwrap();
-        assert_eq!(host_path(r"D:\Songs", Some(root.path())), Some(maps.join("Songs")));
+        assert_eq!(host_path(r"D:\Songs", Some(root.path())), Some(std::fs::canonicalize(&maps).unwrap().join("Songs")));
     }
     #[test]
     fn finds_a_stable_install_in_a_prefix_and_ignores_lazer() {
