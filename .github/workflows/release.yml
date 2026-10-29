@@ -47,7 +47,7 @@ jobs:
         shell: bash
     env:
       CARGO_BUILD_JOBS: 2
-      SIGN: ${{ matrix.platform == 'windows' && secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      WINDOWS_SIGNING: ${{ matrix.platform == 'windows' && secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -100,7 +100,7 @@ jobs:
         with:
           name: linux-startup-check
           path: .runtime-smoke
-            include-hidden-files: true
+          include-hidden-files: true
           if-no-files-found: warn
       - name: Headless UI checks
         if: matrix.platform == 'windows'
@@ -125,7 +125,7 @@ jobs:
           path: staging/osuflow-setup.exe
           if-no-files-found: error
       - name: Sign Windows installer (SignPath Foundation)
-        if: env.SIGN == 'true'
+        if: env.WINDOWS_SIGNING == 'true'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -138,7 +138,7 @@ jobs:
           wait-for-completion-timeout-in-seconds: 7200
           output-artifact-directory: signed
       - name: Check Windows signature
-        if: env.SIGN == 'true'
+        if: env.WINDOWS_SIGNING == 'true'
         shell: pwsh
         run: |
           $signature = Get-AuthenticodeSignature signed/osuflow-setup.exe
@@ -149,7 +149,7 @@ jobs:
           version=$(node -p "require('./package.json').version")
           if [ "${{ matrix.platform }}" = "windows" ]; then
             source=staging
-            if [ "$SIGN" = "true" ]; then source=signed; fi
+            if [ "$WINDOWS_SIGNING" = "true" ]; then source=signed; fi
             cp "$source/osuflow-setup.exe" "release/osu!flow_${version}_x64-setup.exe"
           else
             find src-tauri/target/${{ matrix.target }}/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.dmg' \) -exec cp '{}' release/ \;
