@@ -1859,3 +1859,9 @@ html[data-platform="macos"] { --font: -apple-system, system-ui, sans-serif; --fo
 .path-picker input { flex: 1; width: 0; min-width: 0; }
 .path-picker button { flex: none; white-space: nowrap; }
 .lazer-settings > strong { display: block; }
+
+.dl-row.manual .dl-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.dl-row.manual .dl-name { grid-column: 1; grid-row: 1; }
+.dl-row.manual .dl-actions { grid-column: 2; grid-row: 1; }
+.dl-row.manual .dl-state { grid-column: 1 / -1; grid-row: 2; white-space: normal; overflow-wrap: anywhere; }
+.dl-actions .reveal-downloads { width: auto; padding: 0 6px; white-space: nowrap; }

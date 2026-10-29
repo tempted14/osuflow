@@ -62,7 +62,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libxdo-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libxdo-dev xvfb xauth dbus-x11 imagemagick x11-utils
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -91,6 +91,16 @@ jobs:
         env:
           NO_STRIP: "true"
         run: npm run tauri build -- --verbose --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Linux packaged-app startup check
+        if: matrix.platform == 'linux'
+        run: bash tools/ci/linux-smoke.sh src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+      - name: Keep Linux startup diagnostics
+        if: always() && matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-startup-check
+          path: .runtime-smoke
+          if-no-files-found: warn
       - name: Headless UI checks
         if: matrix.platform == 'windows'
         run: |

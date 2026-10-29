@@ -153,10 +153,10 @@ pub fn find_install(settings: &Settings) -> Option<PathBuf> {
     if let Some(prefix) = &settings.wine_prefix {
         return install_in_prefix(prefix); // An explicit prefix must not silently select another install.
     }
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        if let Some(exe) = winello_exe(&data_home(&home)) {
-            return Some(exe);
-        }
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
+        && let Some(exe) = winello_exe(&data_home(&home))
+    {
+        return Some(exe);
     }
     prefixes()
         .into_iter()

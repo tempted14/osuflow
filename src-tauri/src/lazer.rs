@@ -186,15 +186,12 @@ pub fn data_dir(settings: &Settings) -> Option<PathBuf> {
 
 fn default_app() -> Option<PathBuf> {
     #[cfg(windows)]
-    if let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
-        let root = local.join("osulazer");
-        for path in [root.join("current/osu!.exe"), root.join("osu!.exe")] {
-            if looks_like_lazer(&path) {
-                return Some(path);
-            }
-        }
-        let mut versions = std::fs::read_dir(root)
-            .ok()?
+    {
+        let root = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("osulazer");
+        let mut candidates = vec![root.join("current/osu!.exe"), root.join("osu!.exe")];
+        let mut versions = std::fs::read_dir(&root)
+            .into_iter()
+            .flatten()
             .flatten()
             .take(128)
             .map(|entry| entry.path())
@@ -204,37 +201,26 @@ fn default_app() -> Option<PathBuf> {
             })
             .collect::<Vec<_>>();
         versions.sort();
-        if let Some(path) = versions
-            .into_iter()
-            .rev()
-            .map(|dir| dir.join("osu!.exe"))
-            .find(|path| looks_like_lazer(path))
-        {
-            return Some(path);
-        }
+        candidates.extend(versions.into_iter().rev().map(|dir| dir.join("osu!.exe")));
+        candidates.into_iter().find(|path| looks_like_lazer(path))
     }
     #[cfg(target_os = "macos")]
-    for path in [
-        PathBuf::from("/Applications/osu!.app/Contents/MacOS/osu!"),
-        std::env::var_os("HOME")
-            .map(PathBuf::from)?
-            .join("Applications/osu!.app/Contents/MacOS/osu!"),
-    ] {
-        if looks_like_lazer(&path) {
-            return Some(path);
-        }
+    {
+        std::iter::once(PathBuf::from("/Applications/osu!.app/Contents/MacOS/osu!"))
+            .chain(
+                std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|home| home.join("Applications/osu!.app/Contents/MacOS/osu!")),
+            )
+            .find(|path| looks_like_lazer(path))
     }
     #[cfg(target_os = "linux")]
-    if let Some(path) = std::env::var_os("PATH") {
-        for path in
-            std::env::split_paths(&path).flat_map(|dir| [dir.join("osu-lazer"), dir.join("osu!")])
-        {
-            if looks_like_lazer(&path) {
-                return Some(path);
-            }
-        }
+    {
+        let paths = std::env::var_os("PATH")?;
+        std::env::split_paths(&paths)
+            .flat_map(|dir| [dir.join("osu-lazer"), dir.join("osu!")])
+            .find(|path| looks_like_lazer(path))
     }
-    None
 }
 
 fn auto_app() -> Option<(PathBuf, DetectSource)> {
@@ -404,6 +390,10 @@ pub fn file_set_id(file: &Path) -> Option<u32> {
 }
 
 pub fn scan_files(root: &Path) -> HashMap<PathBuf, u32> {
+    scan_directory(root, root)
+}
+
+pub fn scan_directory(root: &Path, directory: &Path) -> HashMap<PathBuf, u32> {
     fn scan(root: &Path, dir: &Path, depth: usize, files: &mut HashMap<PathBuf, u32>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -429,7 +419,14 @@ pub fn scan_files(root: &Path) -> HashMap<PathBuf, u32> {
         }
     }
     let mut files = HashMap::new();
-    scan(root, root, 0, &mut files);
+    let Ok(relative) = directory.strip_prefix(root) else {
+        return files;
+    };
+    let depth = relative.components().count();
+    if depth > 2 {
+        return files;
+    }
+    scan(root, directory, depth, &mut files);
     files
 }
 

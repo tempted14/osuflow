@@ -61,7 +61,7 @@ export function DownloadsDrawer(props: {
               const fraction = downloadFraction(job);
               const mirrorsDown = job.error?.includes("every mirror failed");
               return (
-                <li key={job.setId} className={`dl-row ${job.state}`}>
+                <li key={job.setId} className={`dl-row ${job.state}${job.importMethod === "savedForLazer" || job.importMethod === "movedToSongs" ? " manual" : ""}`}>
                   <div className="dl-line">
                     <span className="dl-name" title={job.label}>
                       {job.label}
@@ -78,7 +78,7 @@ export function DownloadsDrawer(props: {
                           ↻
                         </button>
                       )}
-                      {job.importMethod === "savedForLazer" && <button className="quiet" onClick={() => void openDownloadsFolder().catch((error) => setFolderError(String(error)))}>Show downloads</button>}
+                      {job.importMethod === "savedForLazer" && <button className="quiet reveal-downloads" onClick={() => void openDownloadsFolder().catch((error) => setFolderError(String(error)))}>Show downloads</button>}
                       {mirrorsDown && (
                         <button
                           className="quiet"

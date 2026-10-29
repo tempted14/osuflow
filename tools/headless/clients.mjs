@@ -50,6 +50,7 @@ try {
         if (method === 'savedForLazer') {
           await sleep(6300); check('lazer fallback: recovery stays visible', await p.eval("!!document.querySelector('.dl-pill')"));
           await p.eval("document.querySelector('.dl-pill').click()"); await sleep(100);
+          check('lazer fallback: recovery controls fit the panel', await p.eval("(() => { const panel = document.querySelector('.dl-panel'); return panel.scrollWidth <= panel.clientWidth && [...panel.querySelectorAll('button')].every((button) => button.getBoundingClientRect().right <= panel.getBoundingClientRect().right); })()"));
           check('lazer fallback: offers the downloads folder', (await p.eval("document.querySelector('.dl-panel').textContent")).includes('Show downloads'));
           await p.eval("[...document.querySelectorAll('.dl-actions button')].find((button) => button.textContent === 'Show downloads').click()");
           check('lazer fallback: folder action stays mocked', await p.eval("window.__calls.some((call) => call.cmd === 'open_downloads_folder')"));

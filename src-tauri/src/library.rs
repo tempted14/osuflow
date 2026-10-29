@@ -170,7 +170,11 @@ impl Library {
                     let mut files = files.lock().unwrap();
                     let old: HashSet<_> = files.values().copied().collect();
                     for path in &event.paths {
-                        if crate::lazer::stored_file(&root, path) {
+                        if path.starts_with(&root) && std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir()) {
+                            // A new hash directory can be populated before inotify registers its
+                            // recursive watch. Reconcile that subtree so those files are not lost.
+                            files.extend(crate::lazer::scan_directory(&root, path));
+                        } else if crate::lazer::stored_file(&root, path) {
                             if let Some(id) = crate::lazer::file_set_id(path) { files.insert(path.clone(), id); }
                             else if !path.exists() { files.remove(path); }
                         } else if path.starts_with(&root) && !path.exists() { files.retain(|file, _| !file.starts_with(path)); }
